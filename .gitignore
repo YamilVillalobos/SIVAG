@@ -1,0 +1,15 @@
+# Entorno virtual (No se sube, se recrea en el servidor)
+backend/venv/
+
+# Python y Cache
+__pycache__/
+*.pyc
+
+# Archivos de datos pesados (Se gestionan en el servidor local)
+*.zip
+*.tiff
+*.xlsx
+
+# Variables de entorno y configuración de VS Code
+.env
+.vscode/
