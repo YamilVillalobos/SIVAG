@@ -1,0 +1,18 @@
+services:
+  backend:
+    build: ./backend
+    container_name: sivag_backend
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DB_HOST=host.docker.internal
+      - DB_PASSWORD=GreenHat_MY77
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: sivag-net

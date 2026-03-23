@@ -7,6 +7,7 @@ click-plugins==1.1.1.2
 cligj==0.7.2
 Django==6.0.2
 djangorestframework==3.16.1
+djangorestframework_simplejwt==5.5.1
 et_xmlfile==2.0.0
 fiona==1.10.1
 geopandas==1.1.2
@@ -15,6 +16,7 @@ openpyxl==3.1.5
 packaging==26.0
 pandas==3.0.1
 psycopg2-binary==2.9.11
+PyJWT==2.12.1
 pyogrio==0.12.1
 pyparsing==3.3.2
 pyproj==3.7.2
