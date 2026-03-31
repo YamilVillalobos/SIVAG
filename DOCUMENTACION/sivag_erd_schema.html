@@ -1,0 +1,167 @@
+
+<style>
+#erd-wrap { padding: 12px 0; }
+#erd { width: 100%; }
+#erd svg { width: 100%; }
+.er-legend { display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; font-size:12px; color:var(--color-text-secondary); }
+.er-legend span { display:flex; align-items:center; gap:5px; }
+.er-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+</style>
+<div id="erd-wrap">
+<div id="erd"></div>
+<div class="er-legend">
+  <span><span class="er-dot" style="background:#1D9E75"></span>Usuarios / Auth</span>
+  <span><span class="er-dot" style="background:#7F77DD"></span>Proyectos</span>
+  <span><span class="er-dot" style="background:#378ADD"></span>Capas geoespaciales</span>
+  <span><span class="er-dot" style="background:#BA7517"></span>Auditoría / Logs</span>
+</div>
+</div>
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+await document.fonts.ready;
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: '"Anthropic Sans", sans-serif',
+  themeVariables: {
+    darkMode: dark,
+    fontSize: '12px',
+    fontFamily: '"Anthropic Sans", sans-serif',
+    primaryColor: dark ? '#085041' : '#E1F5EE',
+    primaryTextColor: dark ? '#9FE1CB' : '#085041',
+    primaryBorderColor: dark ? '#5DCAA5' : '#1D9E75',
+    lineColor: dark ? '#9c9a92' : '#73726c',
+    secondaryColor: dark ? '#3C3489' : '#EEEDFE',
+    tertiaryColor: dark ? '#444441' : '#F1EFE8',
+    textColor: dark ? '#c2c0b6' : '#3d3d3a',
+    edgeLabelBackground: dark ? '#2C2C2A' : '#F1EFE8',
+  },
+  er: { layoutDirection: 'TB', minEntityWidth: 100, minEntityHeight: 75, entityPadding: 15 }
+});
+const diagram = `erDiagram
+  CUSTOMUSER {
+    uuid id PK
+    string email UK
+    string username UK
+    string first_name
+    string last_name
+    date fecha_nacimiento
+    string especialidad
+    string rol
+    string avatar
+    bool is_active
+    datetime fecha_registro
+    string token_recuperacion
+  }
+  PROYECTO {
+    uuid id PK
+    uuid investigador_id FK
+    string titulo
+    string categoria
+    string visibilidad
+    json etiquetas
+    date fecha_inicio
+    date fecha_fin
+    geometry bbox
+    datetime fecha_creacion
+  }
+  CAPAGEOESPACIAL {
+    uuid id PK
+    uuid proyecto_id FK
+    string nombre
+    string tipo_archivo
+    file archivo_original
+    string estado_validacion
+    string sistema_coordenadas
+    string tipo_geometria
+    geometry wkb_geometria
+    string geojson_path
+    int num_features
+    json columnas_schema
+  }
+  ATRIBUTOTABULAR {
+    uuid id PK
+    uuid capa_id FK
+    int indice_original
+    float latitud
+    float longitud
+    geometry punto
+    json datos
+    uuid modificado_por_id FK
+  }
+  VERSIONCAPA {
+    uuid id PK
+    uuid capa_id FK
+    int numero_version
+    file archivo_version
+    string nota_version
+    datetime creado_en
+    uuid creado_por_id FK
+  }
+  HISTORIALCONSULTA {
+    uuid id PK
+    uuid usuario_id FK
+    uuid proyecto_id FK
+    datetime visitado_en
+    int veces
+  }
+  EXPORTACIONREPORTE {
+    uuid id PK
+    uuid usuario_id FK
+    uuid proyecto_id FK
+    string formato
+    file archivo
+    json bbox_exportado
+    datetime generado_en
+  }
+  LOGAUDITORIA {
+    bigint id PK
+    uuid usuario_id FK
+    string usuario_email
+    string accion
+    string objeto_tipo
+    string objeto_id
+    ip ip_origen
+    string user_agent
+    json datos_extra
+    datetime timestamp
+  }
+
+  CUSTOMUSER ||--o{ PROYECTO : "crea"
+  CUSTOMUSER ||--o{ HISTORIALCONSULTA : "visita"
+  CUSTOMUSER ||--o{ EXPORTACIONREPORTE : "genera"
+  CUSTOMUSER ||--o{ LOGAUDITORIA : "registra"
+  CUSTOMUSER ||--o{ ATRIBUTOTABULAR : "edita"
+  CUSTOMUSER ||--o{ VERSIONCAPA : "sube"
+  PROYECTO ||--o{ CAPAGEOESPACIAL : "contiene"
+  PROYECTO ||--o{ HISTORIALCONSULTA : "recibe visitas"
+  PROYECTO ||--o{ EXPORTACIONREPORTE : "es exportado"
+  CAPAGEOESPACIAL ||--o{ ATRIBUTOTABULAR : "tiene filas"
+  CAPAGEOESPACIAL ||--o{ VERSIONCAPA : "versiona"
+`;
+const { svg } = await mermaid.render('erd-svg', diagram);
+document.getElementById('erd').innerHTML = svg;
+
+document.querySelectorAll('#erd .node').forEach(node => {
+  const fp = node.querySelector('path[d]');
+  if (!fp) return;
+  const d = fp.getAttribute('d');
+  const nums = d.match(/-?[\d.]+/g)?.map(Number);
+  if (!nums || nums.length < 8) return;
+  const xs = [nums[0],nums[2],nums[4],nums[6]];
+  const ys = [nums[1],nums[3],nums[5],nums[7]];
+  const x=Math.min(...xs),y=Math.min(...ys),w=Math.max(...xs)-x,h=Math.max(...ys)-y;
+  const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+  rect.setAttribute('x',x); rect.setAttribute('y',y);
+  rect.setAttribute('width',w); rect.setAttribute('height',h);
+  rect.setAttribute('rx','8');
+  for (const a of ['fill','stroke','stroke-width','class','style']) {
+    if (fp.hasAttribute(a)) rect.setAttribute(a,fp.getAttribute(a));
+  }
+  fp.replaceWith(rect);
+});
+document.querySelectorAll('#erd .row-rect-odd path, #erd .row-rect-even path').forEach(p=>{
+  p.setAttribute('stroke','none');
+});
+</script>
