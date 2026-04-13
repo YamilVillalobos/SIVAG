@@ -1,22 +1,39 @@
 """
-URL configuration for sivag_backend project.
+SIVAG — sivag_backend/urls.py
+==============================
+Configuración raíz de URLs del proyecto.
 
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+Estructura de prefijos:
+  /admin/          — Panel de administración de Django
+  /api/auth/       — Autenticación y perfiles (core)
+  /api/            — Resto de la API (pasos futuros: proyectos, capas, etc.)
+
+A medida que avance el desarrollo se irán añadiendo más include():
+  /api/proyectos/  — Paso 4 (gestión de proyectos)
+  /api/capas/      — Paso 5 (ingesta geoespacial)
+  /api/admin/      — Paso 9 (panel de administración)
 """
+
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    # Panel de administración de Django
+    path("admin/", admin.site.urls),
+
+    # ── API v1 ────────────────────────────────────────────
+    # Autenticación, registro y perfiles
+    path("api/auth/", include("core.urls", namespace="auth")),
+
+    # Aquí irán los próximos módulos:
+    # path("api/proyectos/", include("core.urls_proyectos", namespace="proyectos")),
+    # path("api/capas/",     include("core.urls_capas",     namespace="capas")),
+    # path("api/admin/",     include("core.urls_admin",     namespace="sivag-admin")),
 ]
+
+# Servir archivos media en desarrollo (avatares, capas subidas, reportes)
+# En producción Nginx se encarga de esto directamente
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

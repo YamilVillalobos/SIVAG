@@ -16,9 +16,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django.contrib.gis',        # GeoDjango — debe ir antes de 'core'
+    'django.contrib.gis',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'core',
 ]
 
@@ -64,7 +65,7 @@ DATABASES = {
         'OPTIONS': {
             'connect_timeout': 10,
         },
-        'CONN_MAX_AGE': 60,  # Reutilizar conexiones hasta 60s (performance)
+        'CONN_MAX_AGE': 60,
     }
 }
 
@@ -119,18 +120,46 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
 }
 
-# ── GDAL (ruta del sistema — instalado globalmente) ──────────────────────────
-# En el contenedor Docker se detecta automáticamente vía libgdal-dev.
-# En el servidor Ubuntu sin Docker, apuntar a la ruta correcta.
+# ── GDAL ─────────────────────────────────────────────────────────────────────
 GDAL_LIBRARY_PATH = os.environ.get(
     'GDAL_LIBRARY_PATH',
     '/usr/lib/x86_64-linux-gnu/libgdal.so'
 )
 
 # ── Límites de subida de archivos ────────────────────────────────────────────
-DATA_UPLOAD_MAX_MEMORY_SIZE = 104_857_600   # 100 MB en memoria
-FILE_UPLOAD_MAX_MEMORY_SIZE = 104_857_600   # 100 MB antes de usar disco
+DATA_UPLOAD_MAX_MEMORY_SIZE = 104_857_600   # 100 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 104_857_600   # 100 MB
 
-# ── Email (configurar con SMTP real en producción) ───────────────────────────
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# ── Email ─────────────────────────────────────────────────────────────────────
+# DESARROLLO: imprime los emails en la consola de Docker (docker logs sivag_backend)
+EMAIL_BACKEND   = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'no-reply@sivag.ccgs.mx'
+
+# PRODUCCIÓN: cuando estés listo para desplegar en el servidor del CCGS,
+# comenta las dos líneas de arriba y descomenta el bloque de abajo.
+# Las credenciales se leen desde variables de entorno (nunca hardcodeadas aquí).
+#
+# EMAIL_BACKEND       = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST          = os.environ.get('EMAIL_HOST',          'smtp.gmail.com')
+# EMAIL_PORT          = int(os.environ.get('EMAIL_PORT',      587))
+# EMAIL_USE_TLS       = True
+# EMAIL_HOST_USER     = os.environ.get('EMAIL_HOST_USER',     '')
+# EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+#
+# Guía rápida Gmail:
+#   1. myaccount.google.com → Seguridad → Verificación en 2 pasos (activar)
+#   2. myaccount.google.com → Seguridad → Contraseñas de aplicaciones
+#   3. Crear contraseña para "Correo / Otro dispositivo" → copiar los 16 chars
+#   4. Agregar al docker-compose.yml o entorno del servidor:
+#      - EMAIL_HOST_USER=tu-correo@gmail.com
+#      - EMAIL_HOST_PASSWORD=abcdefghijklmnop
+#
+# Alternativa SMTP institucional CCGS (preguntar a TI del centro):
+#   EMAIL_HOST = 'mail.ccgs.mx'
+#   EMAIL_PORT = 587
+#   EMAIL_HOST_USER = 'no-reply@sivag.ccgs.mx'
+
+# ── URL del frontend ──────────────────────────────────────────────────────────
+# Se usa para construir el enlace de recuperación de contraseña en los emails.
+# En producción cambiar por el dominio real: https://sivag.ccgs.mx
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
