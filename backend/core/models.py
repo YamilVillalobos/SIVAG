@@ -188,7 +188,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     ultimo_acceso  = models.DateTimeField(_("último acceso"), null=True, blank=True)
 
     # Token para recuperación de contraseña
-    token_recuperacion     = models.CharField(max_length=64, blank=True, db_index=True)
+    token_recuperacion     = models.CharField(max_length=96, blank=True, db_index=True)
     token_recuperacion_exp = models.DateTimeField(null=True, blank=True)
 
     objects = CustomUserManager()

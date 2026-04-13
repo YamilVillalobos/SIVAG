@@ -27,9 +27,11 @@ urlpatterns = [
     # Autenticación, registro y perfiles
     path("api/auth/", include("core.urls", namespace="auth")),
 
+    # Ingesta geoespacial (Paso 4)
+    path("api/capas/",     include("core.urls_capas",     namespace="capas")),
+
     # Aquí irán los próximos módulos:
     # path("api/proyectos/", include("core.urls_proyectos", namespace="proyectos")),
-    # path("api/capas/",     include("core.urls_capas",     namespace="capas")),
     # path("api/admin/",     include("core.urls_admin",     namespace="sivag-admin")),
 ]
 
