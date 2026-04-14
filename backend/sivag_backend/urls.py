@@ -4,14 +4,14 @@ SIVAG — sivag_backend/urls.py
 Configuración raíz de URLs del proyecto.
 
 Estructura de prefijos:
-  /admin/          — Panel de administración de Django
-  /api/auth/       — Autenticación y perfiles (core)
-  /api/            — Resto de la API (pasos futuros: proyectos, capas, etc.)
+  /admin/            — Panel de administración de Django
+  /api/auth/         — Autenticación, registro y perfiles (Paso 3)
+  /api/capas/        — Ingesta geoespacial y ETL (Paso 4)
+  /api/proyectos/    — Gestión de proyectos geoespaciales (Paso 5)
 
-A medida que avance el desarrollo se irán añadiendo más include():
-  /api/proyectos/  — Paso 4 (gestión de proyectos)
-  /api/capas/      — Paso 5 (ingesta geoespacial)
-  /api/admin/      — Paso 9 (panel de administración)
+  Próximos pasos:
+  /api/admin/        — Panel de administración SIVAG (Paso 8)
+  /api/dashboard/    — Endpoints de dashboard e inteligencia visual (Paso 6)
 """
 
 from django.contrib import admin
@@ -23,19 +23,23 @@ urlpatterns = [
     # Panel de administración de Django
     path("admin/", admin.site.urls),
 
-    # ── API v1 ────────────────────────────────────────────
-    # Autenticación, registro y perfiles
-    path("api/auth/", include("core.urls", namespace="auth")),
+    # ── API v1 ─────────────────────────────────────────────────────────────
 
-    # Ingesta geoespacial (Paso 4)
-    path("api/capas/",     include("core.urls_capas",     namespace="capas")),
+    # Paso 3 — Autenticación, registro y perfiles
+    path("api/auth/",       include("core.urls",           namespace="auth")),
 
-    # Aquí irán los próximos módulos:
-    # path("api/proyectos/", include("core.urls_proyectos", namespace="proyectos")),
-    # path("api/admin/",     include("core.urls_admin",     namespace="sivag-admin")),
+    # Paso 4 — Ingesta geoespacial (Drag & Drop + ETL)
+    path("api/capas/",      include("core.urls_capas",     namespace="capas")),
+
+    # Paso 5 — Gestión de proyectos (CRUD, publicación, versiones)
+    path("api/proyectos/",  include("core.urls_proyectos", namespace="proyectos")),
+
+    # ── Próximos módulos (descomentar conforme avance el desarrollo) ────────
+    # path("api/dashboard/",  include("core.urls_dashboard",  namespace="dashboard")),
+    # path("api/admin/",      include("core.urls_admin",       namespace="sivag-admin")),
 ]
 
-# Servir archivos media en desarrollo (avatares, capas subidas, reportes)
-# En producción Nginx se encarga de esto directamente
+# ── Archivos media en desarrollo ───────────────────────────────────────────
+# En producción Nginx sirve /media/ directamente con alias y X-Accel-Redirect.
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

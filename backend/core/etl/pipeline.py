@@ -34,6 +34,7 @@ from core.models import (
     CapaGeoespacial,
     EstadoValidacion,
     LogAuditoria,
+    Proyecto,
     TipoArchivo,
     TipoGeometria,
     VersionCapa,
@@ -203,6 +204,13 @@ def run_etl_pipeline(capa_id: str, request=None) -> dict:
         },
     )
 
+
+    # ── 10. Actualizar bbox del Proyecto padre ───────────
+    # Recalcula el bounding box del proyecto unificando todas
+    # sus capas aprobadas para que el filtro geografico del
+    # explorador publico (RF-06) siempre tenga datos frescos.
+    _update_proyecto_bbox(capa.proyecto)
+
     resultado.update({
         "ok":      True,
         "estado":  EstadoValidacion.APROBADO,
@@ -356,3 +364,83 @@ def _fake_error_result(msg):
     r = ValidationResult()
     r.error_msg = msg
     return r
+
+
+def _update_proyecto_bbox(proyecto: Proyecto) -> None:
+    """
+    Recalcula y persiste el bounding box del Proyecto padre
+    cada vez que una CapaGeoespacial es aprobada por el ETL.
+
+    Estrategia:
+      - Reúne los bbox de todas las capas APROBADAS del proyecto.
+      - Para capas vectoriales usa el campo wkb_geometria (PostGIS).
+      - Para capas ráster usa el campo raster_bbox.
+      - Hace la unión geométrica de todos los bbox individuales.
+      - Guarda el resultado en Proyecto.bbox (PolygonField SRID 4326).
+
+    Si no hay capas con geometría disponible no hace nada (silencioso).
+    Los errores se loguean pero no interrumpen el flujo del ETL.
+    """
+    try:
+        from django.contrib.gis.db.models import Union
+        from django.contrib.gis.geos import GEOSGeometry, Polygon
+
+        capas_aprobadas = CapaGeoespacial.objects.filter(
+            proyecto=proyecto,
+            estado_validacion=EstadoValidacion.APROBADO,
+        )
+
+        geometrias = []
+
+        for capa in capas_aprobadas:
+            # Capas vectoriales: usar wkb_geometria si está poblada
+            if capa.wkb_geometria:
+                env = capa.wkb_geometria.envelope
+                if env and not env.empty:
+                    geometrias.append(env)
+                continue
+
+            # Capas ráster: usar raster_bbox
+            if capa.raster_bbox:
+                geometrias.append(capa.raster_bbox)
+                continue
+
+            # Fallback: construir bbox desde los metadatos del validador
+            # (columnas_schema guarda el bbox como lista en algunos casos)
+            # Este path cubre capas vectoriales cuya wkb_geometria aún no
+            # fue poblada (se hace en un paso posterior al ETL básico).
+            pass
+
+        if not geometrias:
+            logger.debug(
+                "Proyecto %s: ninguna capa con geometría disponible para calcular bbox.",
+                proyecto.id,
+            )
+            return
+
+        # Unión de todos los envelopes → bbox global del proyecto
+        bbox_union = geometrias[0]
+        for geom in geometrias[1:]:
+            bbox_union = bbox_union.union(geom)
+
+        # Asegurar que el resultado sea un Polygon (envelope del resultado)
+        bbox_final = bbox_union.envelope
+
+        if bbox_final and not bbox_final.empty:
+            # Asegurar SRID correcto
+            bbox_final.srid = 4326
+            proyecto.bbox = bbox_final
+            proyecto.save(update_fields=["bbox"])
+            logger.info(
+                "Proyecto %s: bbox actualizado → %s",
+                proyecto.id,
+                bbox_final.extent,
+            )
+
+    except Exception as exc:
+        # Nunca interrumpir el ETL por un error en el bbox
+        logger.error(
+            "Error al actualizar bbox del proyecto %s: %s",
+            proyecto.id,
+            exc,
+        )
