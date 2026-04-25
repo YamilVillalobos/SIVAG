@@ -1,7 +1,7 @@
 """
 SIVAG — core/etl/validators.py
 ================================
-Validadores de integridad para los tres formatos soportados.
+Validadores de integridad para los cuatro formatos soportados.
 
 Cada validador sigue el mismo contrato:
   validate_<tipo>(filepath: str) -> ValidationResult
@@ -12,12 +12,17 @@ ValidationResult es un dataclass con:
   meta        : dict       — metadatos extraídos durante la validación
                              (CRS, columnas, num_features, bbox, bandas, etc.)
 
+Formatos soportados:
+  Excel   (.xlsx)  — puntos con columnas lat/lon
+  CSV     (.csv)   — igual que Excel, motor diferente
+  Shape   (.zip)   — Shapefile comprimido
+  GeoTIFF (.tiff)  — ráster nativo, se valida y procesa tal cual (sin conversión a GeoJSON)
+
 Requisito IEEE: RF-03 — Validación Geoespacial y Conversión Automática
 """
 
 from __future__ import annotations
 
-import io
 import os
 import zipfile
 from dataclasses import dataclass, field
@@ -28,7 +33,6 @@ import numpy as np
 import pandas as pd
 import rasterio
 from rasterio.crs import CRS
-from shapely.geometry import box
 
 
 # ─────────────────────────────────────────────────────────
@@ -64,56 +68,32 @@ MAX_FILE_SIZE = 100 * 1024 * 1024
 
 def _detect_coord_columns(columns: list[str]) -> tuple[Optional[str], Optional[str]]:
     """
-    Busca columnas de latitud y longitud en los encabezados del Excel.
+    Busca columnas de latitud y longitud en los encabezados del archivo.
     Devuelve (col_lat, col_lon) o (None, None) si no las encuentra.
     """
     lower_map = {c.lower().strip(): c for c in columns}
-
     col_lat = next((lower_map[c] for c in LAT_CANDIDATES if c in lower_map), None)
     col_lon = next((lower_map[c] for c in LON_CANDIDATES if c in lower_map), None)
-
     return col_lat, col_lon
 
 
 # ─────────────────────────────────────────────────────────
-# 1. Validador Excel (.xlsx)
+# Helper interno: validar DataFrame tabular (Excel y CSV comparten la misma lógica)
 # ─────────────────────────────────────────────────────────
 
-def validate_excel(filepath: str) -> ValidationResult:
+def _validate_dataframe(df: pd.DataFrame) -> ValidationResult:
     """
-    Valida un archivo Excel (.xlsx) para uso geoespacial.
-
-    Verificaciones:
-      1. El archivo se puede leer con pandas/openpyxl.
-      2. Contiene al menos una hoja con datos.
-      3. Se detectan columnas de latitud y longitud (por nombre).
-      4. No hay filas con latitud/longitud vacías (NaN).
-      5. Los valores de coordenadas están dentro de rango válido.
-      6. Al menos 1 fila de datos válida.
-
-    Metadatos devueltos:
-      columnas        : lista de nombres de columnas
-      columna_lat     : nombre de la columna de latitud detectada
-      columna_lon     : nombre de la columna de longitud detectada
-      num_rows        : total de filas con datos
-      num_validas     : filas con coordenadas válidas
-      columnas_schema : {col: dtype_str, ...}
-      bbox            : [min_lon, min_lat, max_lon, max_lat]
+    Valida un DataFrame ya cargado (desde Excel o CSV).
+    Detecta columnas lat/lon, verifica NaN y rangos.
+    Retorna ValidationResult con meta completo si ok=True.
     """
     result = ValidationResult()
 
-    # ── 1. Leer archivo ──────────────────────────────────
-    try:
-        df = pd.read_excel(filepath, engine="openpyxl")
-    except Exception as e:
-        result.error_msg = f"No se pudo leer el archivo Excel: {e}"
-        return result
-
     if df.empty:
-        result.error_msg = "El archivo Excel está vacío o no contiene datos."
+        result.error_msg = "El archivo está vacío o no contiene datos."
         return result
 
-    # ── 2. Detectar columnas de coordenadas ───────────────
+    # ── Detectar columnas de coordenadas ─────────────────
     col_lat, col_lon = _detect_coord_columns(df.columns.tolist())
 
     if col_lat is None:
@@ -132,7 +112,7 @@ def validate_excel(filepath: str) -> ValidationResult:
         )
         return result
 
-    # ── 3. Convertir a numérico ──────────────────────────
+    # ── Convertir a numérico ─────────────────────────────
     try:
         df[col_lat] = pd.to_numeric(df[col_lat], errors="coerce")
         df[col_lon] = pd.to_numeric(df[col_lon], errors="coerce")
@@ -140,13 +120,12 @@ def validate_excel(filepath: str) -> ValidationResult:
         result.error_msg = f"Error al convertir coordenadas a numérico: {e}"
         return result
 
-    # ── 4. Detectar filas con NaN ────────────────────────
+    # ── Detectar NaN ─────────────────────────────────────
     nulos_lat = df[col_lat].isna().sum()
     nulos_lon = df[col_lon].isna().sum()
 
     if nulos_lat > 0 or nulos_lon > 0:
-        # Encontrar primer índice con error para el mensaje específico
-        primer_error = df[df[col_lat].isna() | df[col_lon].isna()].index[0] + 2  # +2 por header + 0-index
+        primer_error = df[df[col_lat].isna() | df[col_lon].isna()].index[0] + 2
         result.error_msg = (
             f"Coordenadas vacías o no numéricas: "
             f"{nulos_lat} fila(s) con latitud inválida, "
@@ -155,17 +134,13 @@ def validate_excel(filepath: str) -> ValidationResult:
         )
         return result
 
-    # ── 5. Validar rangos ────────────────────────────────
-    fuera_lat = df[
-        (df[col_lat] < LAT_RANGE[0]) | (df[col_lat] > LAT_RANGE[1])
-    ]
-    fuera_lon = df[
-        (df[col_lon] < LON_RANGE[0]) | (df[col_lon] > LON_RANGE[1])
-    ]
+    # ── Validar rangos ───────────────────────────────────
+    fuera_lat = df[(df[col_lat] < LAT_RANGE[0]) | (df[col_lat] > LAT_RANGE[1])]
+    fuera_lon = df[(df[col_lon] < LON_RANGE[0]) | (df[col_lon] > LON_RANGE[1])]
 
     if not fuera_lat.empty:
         fila = fuera_lat.index[0] + 2
-        val = fuera_lat.iloc[0][col_lat]
+        val  = fuera_lat.iloc[0][col_lat]
         result.error_msg = (
             f"Latitud fuera de rango en fila {fila}: {val} "
             f"(válido: {LAT_RANGE[0]} a {LAT_RANGE[1]})."
@@ -174,14 +149,14 @@ def validate_excel(filepath: str) -> ValidationResult:
 
     if not fuera_lon.empty:
         fila = fuera_lon.index[0] + 2
-        val = fuera_lon.iloc[0][col_lon]
+        val  = fuera_lon.iloc[0][col_lon]
         result.error_msg = (
             f"Longitud fuera de rango en fila {fila}: {val} "
             f"(válido: {LON_RANGE[0]} a {LON_RANGE[1]})."
         )
         return result
 
-    # ── 6. Construir metadatos ───────────────────────────
+    # ── Construir metadatos ──────────────────────────────
     schema = {col: str(df[col].dtype) for col in df.columns}
     bbox = [
         float(df[col_lon].min()),
@@ -192,20 +167,95 @@ def validate_excel(filepath: str) -> ValidationResult:
 
     result.ok = True
     result.meta = {
-        "columnas":        df.columns.tolist(),
-        "columna_lat":     col_lat,
-        "columna_lon":     col_lon,
-        "num_rows":        len(df),
-        "num_validas":     len(df),
-        "columnas_schema": schema,
-        "bbox":            bbox,
-        "sistema_coordenadas": "EPSG:4326",  # Asumimos WGS84 para Excel
+        "columnas":            df.columns.tolist(),
+        "columna_lat":         col_lat,
+        "columna_lon":         col_lon,
+        "num_rows":            len(df),
+        "num_validas":         len(df),
+        "columnas_schema":     schema,
+        "bbox":                bbox,
+        "sistema_coordenadas": "EPSG:4326",
     }
     return result
 
 
 # ─────────────────────────────────────────────────────────
-# 2. Validador Shapefile (.zip)
+# 1. Validador Excel (.xlsx)
+# ─────────────────────────────────────────────────────────
+
+def validate_excel(filepath: str) -> ValidationResult:
+    """
+    Valida un archivo Excel (.xlsx) para uso geoespacial.
+    Carga con openpyxl y delega la lógica a _validate_dataframe.
+    """
+    result = ValidationResult()
+    try:
+        df = pd.read_excel(filepath, engine="openpyxl")
+    except Exception as e:
+        result.error_msg = f"No se pudo leer el archivo Excel: {e}"
+        return result
+
+    return _validate_dataframe(df)
+
+
+# ─────────────────────────────────────────────────────────
+# 2. Validador CSV (.csv)
+# ─────────────────────────────────────────────────────────
+
+def validate_csv(filepath: str) -> ValidationResult:
+    """
+    Valida un archivo CSV para uso geoespacial.
+
+    Intentamos detectar el separador automáticamente (coma, punto y coma
+    o tabulador) usando el Sniffer de Python antes de cargar el DataFrame.
+    La lógica de validación de coordenadas es idéntica a la del Excel.
+
+    Metadatos devueltos: idénticos a validate_excel.
+    """
+    result = ValidationResult()
+
+    # ── Detectar encoding y separador ────────────────────
+    separador = ","
+    encoding  = "utf-8"
+
+    try:
+        import csv as csv_module
+        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+            muestra = f.read(4096)
+        dialecto  = csv_module.Sniffer().sniff(muestra, delimiters=",;\t")
+        separador = dialecto.delimiter
+    except Exception:
+        # Si el sniffer falla, usamos coma por defecto
+        separador = ","
+
+    # ── Leer archivo ─────────────────────────────────────
+    for enc in ("utf-8", "utf-8-sig", "latin-1", "cp1252"):
+        try:
+            df = pd.read_csv(filepath, sep=separador, encoding=enc)
+            encoding = enc
+            break
+        except UnicodeDecodeError:
+            continue
+        except Exception as e:
+            result.error_msg = f"No se pudo leer el archivo CSV: {e}"
+            return result
+    else:
+        result.error_msg = (
+            "No se pudo leer el archivo CSV. "
+            "Asegúrate de que esté guardado en UTF-8, UTF-8 BOM, Latin-1 o CP1252."
+        )
+        return result
+
+    # Agregar info de lectura al resultado
+    vr = _validate_dataframe(df)
+    if vr.ok:
+        vr.meta["encoding_detectado"] = encoding
+        vr.meta["separador_detectado"] = separador
+    return vr
+
+
+# ─────────────────────────────────────────────────────────
+# 3. Validador Shapefile (.zip)
 # ─────────────────────────────────────────────────────────
 
 def validate_shapefile(filepath: str) -> ValidationResult:
@@ -221,13 +271,13 @@ def validate_shapefile(filepath: str) -> ValidationResult:
       6. Los tipos de geometría son soportados.
 
     Metadatos devueltos:
-      shp_filename    : nombre del .shp encontrado
+      shp_filename        : nombre del .shp encontrado
       sistema_coordenadas : código EPSG como string (ej "EPSG:4326")
-      tipo_geometria  : PUNTO | LINEA | POLIGONO | MIXTO
-      num_features    : cantidad de features
-      columnas_schema : {campo: tipo_fiona, ...}
-      bbox            : [min_lon, min_lat, max_lon, max_lat] en EPSG:4326
-      crs_original    : WKT del CRS original
+      tipo_geometria      : PUNTO | LINEA | POLIGONO | MIXTO
+      num_features        : cantidad de features
+      columnas_schema     : {campo: tipo_fiona, ...}
+      bbox                : [min_lon, min_lat, max_lon, max_lat]
+      crs_original        : WKT del CRS original
     """
     result = ValidationResult()
 
@@ -250,15 +300,11 @@ def validate_shapefile(filepath: str) -> ValidationResult:
             return result
 
         shp_name = shp_files[0]
-
-        # ── 3. Intentar abrir con Fiona ─────────────────
-        # Fiona soporta lectura directa desde ZIP con el protocolo /vsizip/
         vsi_path = f"/vsizip/{filepath}/{shp_name}"
 
         try:
             with fiona.open(vsi_path, "r") as src:
 
-                # ── 4. Verificar CRS ─────────────────────
                 if src.crs is None:
                     result.error_msg = (
                         f"El Shapefile '{shp_name}' no tiene un sistema de "
@@ -266,7 +312,6 @@ def validate_shapefile(filepath: str) -> ValidationResult:
                     )
                     return result
 
-                # ── 5. Verificar features ────────────────
                 num_features = len(src)
                 if num_features == 0:
                     result.error_msg = (
@@ -274,28 +319,20 @@ def validate_shapefile(filepath: str) -> ValidationResult:
                     )
                     return result
 
-                # ── 6. Tipo de geometría ──────────────────
                 geom_type_raw = src.schema["geometry"]
                 tipo = _map_geom_type(geom_type_raw)
 
-                # Obtener CRS como EPSG string si es posible
                 try:
-                    crs_obj  = CRS.from_wkt(src.crs.wkt) if hasattr(src.crs, "wkt") else CRS(src.crs)
-                    epsg     = crs_obj.to_epsg()
-                    crs_str  = f"EPSG:{epsg}" if epsg else crs_obj.to_string()
-                    crs_wkt  = crs_obj.to_wkt()
+                    crs_obj = CRS.from_wkt(src.crs.wkt) if hasattr(src.crs, "wkt") else CRS(src.crs)
+                    epsg    = crs_obj.to_epsg()
+                    crs_str = f"EPSG:{epsg}" if epsg else crs_obj.to_string()
+                    crs_wkt = crs_obj.to_wkt()
                 except Exception:
                     crs_str = str(src.crs)
                     crs_wkt = str(src.crs)
 
-                # Bounding box
-                raw_bbox = src.bounds  # (minx, miny, maxx, maxy) en CRS original
-                # Si no es 4326 lo guardamos igual; la reproyección ocurre en el conversor
-                bbox_list = list(raw_bbox)
-
-                schema_fields = {
-                    k: v for k, v in src.schema["properties"].items()
-                }
+                bbox_list     = list(src.bounds)
+                schema_fields = {k: v for k, v in src.schema["properties"].items()}
 
         except fiona.errors.DriverError as e:
             result.error_msg = f"El Shapefile está corrupto o no se puede abrir: {e}"
@@ -321,38 +358,47 @@ def _map_geom_type(fiona_type: str) -> str:
     """Convierte el tipo de geometría de Fiona al enum TipoGeometria de SIVAG."""
     t = fiona_type.upper().replace("MULTI", "").strip()
     mapping = {
-        "POINT":        "PUNTO",
-        "LINESTRING":   "LINEA",
-        "POLYGON":      "POLIGONO",
+        "POINT":      "PUNTO",
+        "LINESTRING": "LINEA",
+        "POLYGON":    "POLIGONO",
     }
     return mapping.get(t, "MIXTO")
 
 
 # ─────────────────────────────────────────────────────────
-# 3. Validador GeoTIFF (.tiff / .tif)
+# 4. Validador GeoTIFF (.tiff / .tif)
 # ─────────────────────────────────────────────────────────
 
 def validate_geotiff(filepath: str) -> ValidationResult:
     """
     Valida un archivo GeoTIFF.
 
+    El GeoTIFF se procesa y sirve TAL CUAL (el archivo original se conserva
+    íntegro). No se convierte a GeoJSON ni se transforma la información.
+    El pipeline solo genera overviews para optimizar la visualización en
+    Leaflet con TileLayer.GeoTIFF o similar.
+
     Verificaciones:
       1. El archivo se puede abrir con rasterio.
       2. Tiene al menos 1 banda.
       3. Posee un CRS definido.
       4. El transform no es identidad (tiene georeferenciación real).
-      5. Las dimensiones son razonables (> 10x10 píxeles).
+      5. Las dimensiones son razonables (> 10×10 píxeles).
 
     Metadatos devueltos:
       sistema_coordenadas : código EPSG como string
+      crs_original        : WKT completo del CRS
       num_bandas          : cantidad de bandas
       ancho               : píxeles horizontales
       alto                : píxeles verticales
-      dtype               : tipo de dato (uint8, float32, etc.)
+      dtype               : tipo de dato de banda 1 (uint8, float32, etc.)
       bbox                : [min_lon, min_lat, max_lon, max_lat] en EPSG:4326
+      resolucion_x        : resolución espacial en X (unidades del CRS)
+      resolucion_y        : resolución espacial en Y (unidades del CRS)
       banda_min           : valor mínimo de la banda 1
       banda_max           : valor máximo de la banda 1
-      crs_original        : WKT del CRS original
+      nodata              : valor nodata declarado (o None)
+      necesita_reproyeccion: True si el CRS no es EPSG:4326
     """
     result = ValidationResult()
 
@@ -373,9 +419,7 @@ def validate_geotiff(filepath: str) -> ValidationResult:
                 return result
 
             # ── 3. Verificar georeferenciación real ──────
-            t = src.transform
-            # Un transform identidad significa que no hay georeferenciación
-            if t.is_identity:
+            if src.transform.is_identity:
                 result.error_msg = (
                     "El GeoTIFF no tiene georeferenciación (transform es identidad). "
                     "El archivo es una imagen sin coordenadas espaciales."
@@ -385,19 +429,23 @@ def validate_geotiff(filepath: str) -> ValidationResult:
             # ── 4. Verificar dimensiones mínimas ─────────
             if src.width < 10 or src.height < 10:
                 result.error_msg = (
-                    f"El GeoTIFF tiene dimensiones muy pequeñas ({src.width}×{src.height} px). "
+                    f"El GeoTIFF tiene dimensiones muy pequeñas "
+                    f"({src.width}×{src.height} px). "
                     "El mínimo requerido es 10×10 píxeles."
                 )
                 return result
 
-            # ── 5. Obtener EPSG ──────────────────────────
+            # ── 5. Obtener EPSG y WKT ────────────────────
             try:
                 epsg    = src.crs.to_epsg()
                 crs_str = f"EPSG:{epsg}" if epsg else src.crs.to_string()
             except Exception:
                 crs_str = str(src.crs)
 
-            crs_wkt = src.crs.to_wkt() if src.crs else ""
+            try:
+                crs_wkt = src.crs.to_wkt()
+            except Exception:
+                crs_wkt = str(src.crs)
 
             # ── 6. Calcular bbox en EPSG:4326 ────────────
             from rasterio.warp import transform_bounds
@@ -416,8 +464,29 @@ def validate_geotiff(filepath: str) -> ValidationResult:
                 banda_min = None
                 banda_max = None
 
+            # ── 8. Metadatos adicionales del ráster ──────
+            transform     = src.transform
+            resolucion_x  = abs(transform.a)   # tamaño de píxel en X
+            resolucion_y  = abs(transform.e)   # tamaño de píxel en Y
+            nodata        = src.nodata
+
+            # ¿Necesita reproyección para visualizarse en Leaflet?
+            try:
+                necesita_reproyeccion = not src.crs.equals("EPSG:4326")
+            except Exception:
+                necesita_reproyeccion = True
+
+            # Guardamos estos para usarlos en el pipeline
+            num_bandas = src.count
+            ancho      = src.width
+            alto       = src.height
+            dtype      = str(src.dtypes[0])
+
     except rasterio.errors.RasterioIOError as e:
-        result.error_msg = f"No se pudo abrir el GeoTIFF (archivo corrupto o formato no soportado): {e}"
+        result.error_msg = (
+            f"No se pudo abrir el GeoTIFF "
+            f"(archivo corrupto o formato no soportado): {e}"
+        )
         return result
     except Exception as e:
         result.error_msg = f"Error inesperado al leer el GeoTIFF: {e}"
@@ -425,14 +494,18 @@ def validate_geotiff(filepath: str) -> ValidationResult:
 
     result.ok = True
     result.meta = {
-        "sistema_coordenadas": crs_str,
-        "crs_original":        crs_wkt,
-        "num_bandas":          src.count,
-        "ancho":               src.width,
-        "alto":                src.height,
-        "dtype":               str(src.dtypes[0]),
-        "bbox":                bbox,
-        "banda_min":           banda_min,
-        "banda_max":           banda_max,
+        "sistema_coordenadas":   crs_str,
+        "crs_original":          crs_wkt,
+        "num_bandas":            num_bandas,
+        "ancho":                 ancho,
+        "alto":                  alto,
+        "dtype":                 dtype,
+        "bbox":                  bbox,
+        "resolucion_x":          resolucion_x,
+        "resolucion_y":          resolucion_y,
+        "banda_min":             banda_min,
+        "banda_max":             banda_max,
+        "nodata":                nodata,
+        "necesita_reproyeccion": necesita_reproyeccion,
     }
     return result

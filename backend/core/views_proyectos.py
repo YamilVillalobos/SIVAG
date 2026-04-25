@@ -312,6 +312,9 @@ class MisProyectosView(APIView):
     def get(self, request):
         qs = Proyecto.objects.filter(
             investigador=request.user
+        ).exclude(
+            # Excluir proyectos con eliminación lógica (RF-09)
+            etiquetas__contains=["eliminado"]
         ).select_related("investigador").prefetch_related("capas")
 
         # ── Filtros ──────────────────────────────────────
@@ -356,8 +359,10 @@ class MisProyectosView(APIView):
 
         serializer = PanelInvestigadorSerializer(pagina, many=True)
 
-        # Métricas globales del investigador
-        totales = Proyecto.objects.filter(investigador=request.user).aggregate(
+        # Métricas globales del investigador (excluye eliminados)
+        totales = Proyecto.objects.filter(
+            investigador=request.user
+        ).exclude(etiquetas__contains=["eliminado"]).aggregate(
             total_proyectos  = Count("id"),
             publicados       = Count("id", filter=Q(visibilidad=VisibilidadProyecto.PUBLICO)),
             privados         = Count("id", filter=Q(visibilidad=VisibilidadProyecto.PRIVADO)),

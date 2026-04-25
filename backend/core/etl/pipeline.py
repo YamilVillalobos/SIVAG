@@ -3,19 +3,17 @@ SIVAG — core/etl/pipeline.py
 ==============================
 Orquestador principal del pipeline ETL.
 
-Este módulo conecta los validadores y conversores, actualiza el modelo
-CapaGeoespacial, crea los AtributoTabular (Excel), registra la VersionCapa
-y genera el LogAuditoria correspondiente.
+Formatos soportados:
+  Excel   (.xlsx) → GeoJSON + AtributoTabular
+  CSV     (.csv)  → GeoJSON + AtributoTabular
+  Shape   (.zip)  → GeoJSON reproyectado a EPSG:4326
+  GeoTIFF (.tiff) → GeoTIFF nativo con overviews (sin conversión)
 
 Es el único punto de entrada que deben llamar las vistas Django.
 
 Uso:
     from core.etl.pipeline import run_etl_pipeline
-
-    resultado = run_etl_pipeline(
-        capa_id=str(capa.id),
-        request=request,   # para el log de IP
-    )
+    resultado = run_etl_pipeline(capa_id=str(capa.id), request=request)
 """
 
 from __future__ import annotations
@@ -23,7 +21,6 @@ from __future__ import annotations
 import logging
 import os
 import traceback
-from datetime import datetime
 
 from django.conf import settings
 from django.utils import timezone
@@ -34,16 +31,21 @@ from core.models import (
     CapaGeoespacial,
     EstadoValidacion,
     LogAuditoria,
-    Proyecto,
     TipoArchivo,
     TipoGeometria,
     VersionCapa,
 )
-from core.etl.validators import validate_excel, validate_shapefile, validate_geotiff
+from core.etl.validators import (
+    validate_excel,
+    validate_csv,
+    validate_shapefile,
+    validate_geotiff,
+)
 from core.etl.converters import (
     convert_excel_to_geojson,
+    convert_csv_to_geojson,
     convert_shapefile_to_geojson,
-    convert_geotiff_to_cog,
+    process_geotiff_native,
     _geojson_output_path,
     _raster_output_path,
 )
@@ -52,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────
-# Helper: IP del request (puede ser None en llamadas programáticas)
+# Helpers de request
 # ─────────────────────────────────────────────────────────
 
 def _get_ip(request) -> str:
@@ -79,22 +81,16 @@ def run_etl_pipeline(capa_id: str, request=None) -> dict:
     Ejecuta el pipeline ETL completo para una CapaGeoespacial.
 
     Pasos:
-      1. Cargar la instancia de CapaGeoespacial desde la BD.
+      1. Cargar la instancia desde BD.
       2. Marcar estado PROCESANDO.
       3. Ejecutar el validador según tipo_archivo.
-      4. Si la validación falla → marcar ERROR + log.
-      5. Si la validación pasa → ejecutar el conversor correspondiente.
+      4. Si falla → marcar ERROR + log.
+      5. Si pasa  → ejecutar el conversor/procesador correspondiente.
       6. Persistir resultados en CapaGeoespacial y modelos relacionados.
-      7. Marcar estado APROBADO + log de éxito.
+      7. Marcar APROBADO + log de éxito.
 
     Retorna:
-      {
-        "ok":        bool,
-        "capa_id":   str,
-        "estado":    "APROBADO" | "ERROR",
-        "mensaje":   str,
-        "meta":      dict,   # metadatos del proceso
-      }
+      { "ok", "capa_id", "estado", "mensaje", "meta" }
     """
     resultado = {
         "ok":      False,
@@ -111,75 +107,65 @@ def run_etl_pipeline(capa_id: str, request=None) -> dict:
         resultado["mensaje"] = f"No existe ninguna capa con id={capa_id}."
         return resultado
 
-    usuario = capa.proyecto.investigador
+    usuario    = capa.proyecto.investigador
+    archivo_path = capa.archivo_original.path
+    tipo       = capa.tipo_archivo
+    media_root = settings.MEDIA_ROOT
 
     # ── 2. Marcar PROCESANDO ────────────────────────────
     capa.estado_validacion = EstadoValidacion.PROCESANDO
     capa.save(update_fields=["estado_validacion"])
 
-    archivo_path = capa.archivo_original.path
-    tipo         = capa.tipo_archivo
-    media_root   = settings.MEDIA_ROOT
-
     # ── 3. Validar ──────────────────────────────────────
     try:
         if tipo == TipoArchivo.EXCEL:
             vr = validate_excel(archivo_path)
+        elif tipo == TipoArchivo.CSV:
+            vr = validate_csv(archivo_path)
         elif tipo == TipoArchivo.SHAPE:
             vr = validate_shapefile(archivo_path)
         elif tipo == TipoArchivo.GEOTIFF:
             vr = validate_geotiff(archivo_path)
         else:
-            vr = _unknown_type_result(tipo)
+            vr = _error_result(f"Tipo de archivo '{tipo}' no soportado.")
     except Exception:
-        tb = traceback.format_exc()
-        logger.error("Error inesperado en validador para capa %s:\n%s", capa_id, tb)
-        vr = _fake_error_result(f"Error interno del validador. Contacta al administrador.")
+        logger.error("Error en validador, capa %s:\n%s", capa_id, traceback.format_exc())
+        vr = _error_result("Error interno del validador. Contacta al administrador.")
 
-    # ── 4. Manejar fallo de validación ──────────────────
+    # ── 4. Fallo de validación ───────────────────────────
     if not vr.ok:
         capa.estado_validacion = EstadoValidacion.ERROR
         capa.mensaje_error     = vr.error_msg
         capa.save(update_fields=["estado_validacion", "mensaje_error"])
-
-        _log_auditoria(
-            request,
-            AccionLog.VALIDACION_ERR,
-            usuario,
-            "CapaGeoespacial",
-            capa_id,
-            {"error": vr.error_msg, "tipo": tipo},
-        )
-
+        _log_auditoria(request, AccionLog.VALIDACION_ERR, usuario,
+                       "CapaGeoespacial", capa_id,
+                       {"error": vr.error_msg, "tipo": tipo})
         resultado["mensaje"] = vr.error_msg
         return resultado
 
-    # ── 5. Convertir ─────────────────────────────────────
+    # ── 5. Convertir / procesar ──────────────────────────
     try:
-        conversion_result = _run_conversion(
-            capa, vr.meta, archivo_path, media_root
-        )
+        conversion_result = _run_conversion(capa, vr.meta, archivo_path, media_root)
     except Exception:
-        tb = traceback.format_exc()
-        logger.error("Error en conversor para capa %s:\n%s", capa_id, tb)
-        error_msg = "Error durante la conversión del archivo. Contacta al administrador."
+        logger.error("Error en conversor, capa %s:\n%s", capa_id, traceback.format_exc())
+        error_msg = "Error durante el procesamiento del archivo. Contacta al administrador."
         capa.estado_validacion = EstadoValidacion.ERROR
         capa.mensaje_error     = error_msg
         capa.save(update_fields=["estado_validacion", "mensaje_error"])
         resultado["mensaje"] = error_msg
         return resultado
 
-    # ── 6. Persistir resultados ──────────────────────────
+    # ── 6. Persistir ─────────────────────────────────────
     _apply_conversion_to_capa(capa, vr.meta, conversion_result, tipo)
 
-    # ── 7. Crear AtributoTabular (solo Excel) ────────────
-    if tipo == TipoArchivo.EXCEL and "filas" in conversion_result:
-        _create_atributos(capa, conversion_result["filas"], usuario)
+    # ── 7. AtributoTabular (Excel y CSV) ─────────────────
+    if tipo in (TipoArchivo.EXCEL, TipoArchivo.CSV) and "filas" in conversion_result:
+        _create_atributos(capa, conversion_result["filas"])
 
-    # ── 8. Registrar versión ─────────────────────────────
+    # ── 8. Versión ───────────────────────────────────────
     _create_version(capa, usuario)
 
-    # ── 9. Marcar APROBADO + log ─────────────────────────
+    # ── 9. Marcar APROBADO ───────────────────────────────
     capa.estado_validacion = EstadoValidacion.APROBADO
     capa.fecha_procesado   = timezone.now()
     capa.mensaje_error     = ""
@@ -188,28 +174,13 @@ def run_etl_pipeline(capa_id: str, request=None) -> dict:
         "geojson_path", "raster_path", "num_features",
         "tipo_geometria", "sistema_coordenadas",
         "columnas_schema", "columna_lat", "columna_lon",
-        "raster_bbox", "raster_banda_min", "raster_banda_max",
+        "raster_banda_min", "raster_banda_max",
     ])
 
-    _log_auditoria(
-        request,
-        AccionLog.VALIDACION_OK,
-        usuario,
-        "CapaGeoespacial",
-        capa_id,
-        {
-            "tipo":         tipo,
-            "num_features": capa.num_features,
-            "crs":          capa.sistema_coordenadas,
-        },
-    )
-
-
-    # ── 10. Actualizar bbox del Proyecto padre ───────────
-    # Recalcula el bounding box del proyecto unificando todas
-    # sus capas aprobadas para que el filtro geografico del
-    # explorador publico (RF-06) siempre tenga datos frescos.
-    _update_proyecto_bbox(capa.proyecto)
+    _log_auditoria(request, AccionLog.VALIDACION_OK, usuario,
+                   "CapaGeoespacial", capa_id,
+                   {"tipo": tipo, "num_features": capa.num_features,
+                    "crs": capa.sistema_coordenadas})
 
     resultado.update({
         "ok":      True,
@@ -225,10 +196,10 @@ def run_etl_pipeline(capa_id: str, request=None) -> dict:
 # ─────────────────────────────────────────────────────────
 
 def _run_conversion(capa, meta: dict, archivo_path: str, media_root: str) -> dict:
-    """Llama al conversor apropiado según el tipo de archivo."""
-    tipo      = capa.tipo_archivo
+    """Despacha al conversor correcto según el tipo de archivo."""
+    tipo        = capa.tipo_archivo
     proyecto_id = str(capa.proyecto.id)
-    capa_id   = str(capa.id)
+    capa_id     = str(capa.id)
 
     if tipo == TipoArchivo.EXCEL:
         output_path = _geojson_output_path(media_root, proyecto_id, capa_id)
@@ -236,6 +207,17 @@ def _run_conversion(capa, meta: dict, archivo_path: str, media_root: str) -> dic
             filepath=archivo_path,
             col_lat=meta["columna_lat"],
             col_lon=meta["columna_lon"],
+            output_path=output_path,
+        )
+
+    elif tipo == TipoArchivo.CSV:
+        output_path = _geojson_output_path(media_root, proyecto_id, capa_id)
+        return convert_csv_to_geojson(
+            filepath=archivo_path,
+            col_lat=meta["columna_lat"],
+            col_lon=meta["columna_lon"],
+            separador=meta.get("separador_detectado", ","),
+            encoding=meta.get("encoding_detectado", "utf-8"),
             output_path=output_path,
         )
 
@@ -248,8 +230,9 @@ def _run_conversion(capa, meta: dict, archivo_path: str, media_root: str) -> dic
         )
 
     elif tipo == TipoArchivo.GEOTIFF:
+        # El GeoTIFF se procesa nativo: copia + overviews, sin conversión
         output_path = _raster_output_path(media_root, proyecto_id, capa_id)
-        return convert_geotiff_to_cog(
+        return process_geotiff_native(
             input_filepath=archivo_path,
             output_path=output_path,
         )
@@ -263,30 +246,34 @@ def _apply_conversion_to_capa(
     conversion: dict,
     tipo: str,
 ) -> None:
-    """Escribe los resultados del conversor en los campos de la capa."""
+    """Escribe los resultados del procesamiento en los campos de la capa."""
     capa.sistema_coordenadas = meta.get("sistema_coordenadas", "")
     capa.columnas_schema     = meta.get("columnas_schema", {})
 
-    if tipo in (TipoArchivo.EXCEL, TipoArchivo.SHAPE):
-        capa.geojson_path    = _relative_path(conversion.get("geojson_path", ""))
-        capa.num_features    = conversion.get("num_features", 0)
-        capa.tipo_geometria  = conversion.get("tipo_geometria", TipoGeometria.PUNTO)
+    if tipo in (TipoArchivo.EXCEL, TipoArchivo.CSV):
+        capa.geojson_path   = _relative_path(conversion.get("geojson_path", ""))
+        capa.num_features   = conversion.get("num_features", 0)
+        capa.tipo_geometria = TipoGeometria.PUNTO
+        capa.columna_lat    = meta.get("columna_lat", "")
+        capa.columna_lon    = meta.get("columna_lon", "")
 
-        if tipo == TipoArchivo.EXCEL:
-            capa.columna_lat    = meta.get("columna_lat", "")
-            capa.columna_lon    = meta.get("columna_lon", "")
-            capa.tipo_geometria = TipoGeometria.PUNTO
+    elif tipo == TipoArchivo.SHAPE:
+        capa.geojson_path   = _relative_path(conversion.get("geojson_path", ""))
+        capa.num_features   = conversion.get("num_features", 0)
+        capa.tipo_geometria = conversion.get("tipo_geometria", TipoGeometria.PUNTO)
 
     elif tipo == TipoArchivo.GEOTIFF:
+        # El archivo se guarda tal cual, sin conversión a GeoJSON
         capa.raster_path      = _relative_path(conversion.get("raster_path", ""))
         capa.raster_banda_min = conversion.get("banda_min")
         capa.raster_banda_max = conversion.get("banda_max")
         capa.tipo_geometria   = TipoGeometria.RASTER
-        capa.num_features     = 1
+        # num_features = número de bandas (más informativo que 1 para un ráster)
+        capa.num_features     = meta.get("num_bandas", 1)
 
 
 def _relative_path(absolute_path: str) -> str:
-    """Convierte ruta absoluta a ruta relativa respecto a MEDIA_ROOT."""
+    """Convierte ruta absoluta a relativa respecto a MEDIA_ROOT."""
     if not absolute_path:
         return ""
     media_root = str(settings.MEDIA_ROOT)
@@ -296,14 +283,14 @@ def _relative_path(absolute_path: str) -> str:
     return absolute_path
 
 
-def _create_atributos(capa: CapaGeoespacial, filas: list[dict], usuario) -> None:
-    """Crea los registros AtributoTabular en bulk para mayor eficiencia."""
+def _create_atributos(capa: CapaGeoespacial, filas: list[dict]) -> None:
+    """Crea registros AtributoTabular en bulk (lotes de 500)."""
     from django.contrib.gis.geos import Point as GEOSPoint
 
     objs = []
     for fila in filas:
-        lat = fila.get("lat")
-        lon = fila.get("lon")
+        lat   = fila.get("lat")
+        lon   = fila.get("lon")
         punto = GEOSPoint(lon, lat, srid=4326) if lat is not None and lon is not None else None
 
         objs.append(AtributoTabular(
@@ -316,14 +303,13 @@ def _create_atributos(capa: CapaGeoespacial, filas: list[dict], usuario) -> None
             modificado_por=None,
         ))
 
-    # Inserción masiva en lotes de 500 para evitar timeouts
     BATCH_SIZE = 500
     for i in range(0, len(objs), BATCH_SIZE):
-        AtributoTabular.objects.bulk_create(objs[i:i + BATCH_SIZE], ignore_conflicts=False)
+        AtributoTabular.objects.bulk_create(objs[i:i + BATCH_SIZE])
 
 
 def _create_version(capa: CapaGeoespacial, usuario) -> None:
-    """Crea o actualiza el registro de versión para la capa."""
+    """Registra una nueva VersionCapa."""
     ultimo = VersionCapa.objects.filter(capa=capa).order_by("-numero_version").first()
     numero = (ultimo.numero_version + 1) if ultimo else 1
 
@@ -337,7 +323,6 @@ def _create_version(capa: CapaGeoespacial, usuario) -> None:
 
 
 def _log_auditoria(request, accion, usuario, objeto_tipo, objeto_id, datos_extra) -> None:
-    """Registra un LogAuditoria de forma segura (no interrumpe el flujo si falla)."""
     try:
         LogAuditoria.objects.create(
             usuario=usuario,
@@ -352,95 +337,8 @@ def _log_auditoria(request, accion, usuario, objeto_tipo, objeto_id, datos_extra
         logger.error("Error al registrar LogAuditoria: %s", e)
 
 
-def _unknown_type_result(tipo):
-    from core.etl.validators import ValidationResult
-    r = ValidationResult()
-    r.error_msg = f"Tipo de archivo '{tipo}' no soportado por el motor ETL."
-    return r
-
-
-def _fake_error_result(msg):
+def _error_result(msg: str):
     from core.etl.validators import ValidationResult
     r = ValidationResult()
     r.error_msg = msg
     return r
-
-
-def _update_proyecto_bbox(proyecto: Proyecto) -> None:
-    """
-    Recalcula y persiste el bounding box del Proyecto padre
-    cada vez que una CapaGeoespacial es aprobada por el ETL.
-
-    Estrategia:
-      - Reúne los bbox de todas las capas APROBADAS del proyecto.
-      - Para capas vectoriales usa el campo wkb_geometria (PostGIS).
-      - Para capas ráster usa el campo raster_bbox.
-      - Hace la unión geométrica de todos los bbox individuales.
-      - Guarda el resultado en Proyecto.bbox (PolygonField SRID 4326).
-
-    Si no hay capas con geometría disponible no hace nada (silencioso).
-    Los errores se loguean pero no interrumpen el flujo del ETL.
-    """
-    try:
-        from django.contrib.gis.db.models import Union
-        from django.contrib.gis.geos import GEOSGeometry, Polygon
-
-        capas_aprobadas = CapaGeoespacial.objects.filter(
-            proyecto=proyecto,
-            estado_validacion=EstadoValidacion.APROBADO,
-        )
-
-        geometrias = []
-
-        for capa in capas_aprobadas:
-            # Capas vectoriales: usar wkb_geometria si está poblada
-            if capa.wkb_geometria:
-                env = capa.wkb_geometria.envelope
-                if env and not env.empty:
-                    geometrias.append(env)
-                continue
-
-            # Capas ráster: usar raster_bbox
-            if capa.raster_bbox:
-                geometrias.append(capa.raster_bbox)
-                continue
-
-            # Fallback: construir bbox desde los metadatos del validador
-            # (columnas_schema guarda el bbox como lista en algunos casos)
-            # Este path cubre capas vectoriales cuya wkb_geometria aún no
-            # fue poblada (se hace en un paso posterior al ETL básico).
-            pass
-
-        if not geometrias:
-            logger.debug(
-                "Proyecto %s: ninguna capa con geometría disponible para calcular bbox.",
-                proyecto.id,
-            )
-            return
-
-        # Unión de todos los envelopes → bbox global del proyecto
-        bbox_union = geometrias[0]
-        for geom in geometrias[1:]:
-            bbox_union = bbox_union.union(geom)
-
-        # Asegurar que el resultado sea un Polygon (envelope del resultado)
-        bbox_final = bbox_union.envelope
-
-        if bbox_final and not bbox_final.empty:
-            # Asegurar SRID correcto
-            bbox_final.srid = 4326
-            proyecto.bbox = bbox_final
-            proyecto.save(update_fields=["bbox"])
-            logger.info(
-                "Proyecto %s: bbox actualizado → %s",
-                proyecto.id,
-                bbox_final.extent,
-            )
-
-    except Exception as exc:
-        # Nunca interrumpir el ETL por un error en el bbox
-        logger.error(
-            "Error al actualizar bbox del proyecto %s: %s",
-            proyecto.id,
-            exc,
-        )

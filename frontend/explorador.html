@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Explorador de proyectos — SIVAG</title>
+  <link rel="stylesheet" href="css/sivag.css" />
+  <style>
+    .sv-explorador-header {
+      padding: 48px 0 32px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .sv-empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+
+    .sv-empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .sv-empty-state p {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+
+    .sv-pagination {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 40px;
+      flex-wrap: wrap;
+    }
+
+    .sv-page-btn {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid var(--border-dim);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      transition: var(--transition);
+    }
+
+    .sv-page-btn:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .sv-page-btn.active {
+      background: var(--accent-cyan);
+      color: var(--bg-deep);
+      border-color: var(--accent-cyan);
+      font-weight: 700;
+    }
+
+    .sv-page-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .sv-category-pills {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .sv-cat-pill {
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border: 1px solid var(--border-dim);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .sv-cat-pill:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .sv-cat-pill.active {
+      background: rgba(0, 212, 255, 0.15);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+  </style>
+</head>
+<body>
+  <div class="sv-bg-grid"></div>
+  <div class="sv-bg-orb sv-bg-orb-1"></div>
+  <div class="sv-bg-orb sv-bg-orb-2"></div>
+
+  <!-- NAVBAR -->
+  <nav class="sv-navbar" id="sv-main-navbar">
+    <a href="index.html" class="sv-navbar-logo">
+      <img src="assets/logo.svg" alt="SIVAG" />
+    </a>
+    <ul class="sv-navbar-nav" id="sv-navbar-nav"></ul>
+    <div id="sv-user-badge-wrap"></div>
+    <button class="sv-navbar-toggler" id="sv-navbar-toggler">☰</button>
+  </nav>
+
+  <div style="max-width:1200px;margin:0 auto;padding:0 2rem;position:relative;z-index:1;">
+
+    <!-- HEADER -->
+    <div class="sv-explorador-header sv-page">
+      <span class="sv-eyebrow">Proyectos públicos</span>
+      <h1 class="sv-section-title">Explorador <span>Geoespacial</span></h1>
+      <p style="color:var(--text-secondary);font-size:14px;margin-top:8px;max-width:560px;">
+        Descubre proyectos de investigación geoespacial publicados por la comunidad científica.
+      </p>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="sv-filter-bar">
+      <div style="flex:1;min-width:200px;">
+        <div class="sv-input-icon">
+          <span class="sv-icon" style="font-size:12px;">🔍</span>
+          <input
+            type="text"
+            id="sv-search-input"
+            class="sv-input"
+            placeholder="Buscar proyectos..."
+            style="padding-left:36px;"
+          />
+        </div>
+      </div>
+      <select id="sv-cat-filter" class="sv-filter-select">
+        <option value="">Todas las categorías</option>
+        <option value="CLIMA">Clima</option>
+        <option value="FAUNA">Fauna</option>
+        <option value="AGUA">Agua</option>
+        <option value="SUELO">Suelo</option>
+        <option value="VEGETACION">Vegetación</option>
+        <option value="ATMOSFERA">Atmósfera</option>
+        <option value="OTRO">Otro</option>
+      </select>
+      <select id="sv-order-filter" class="sv-filter-select">
+        <option value="-publicado_en">Más recientes</option>
+        <option value="titulo">A–Z</option>
+        <option value="-fecha_actualizacion">Última actualización</option>
+      </select>
+    </div>
+
+    <!-- PILLS DE CATEGORÍAS (cargadas desde API) -->
+    <div class="sv-category-pills" id="sv-cat-pills">
+      <button class="sv-cat-pill active" data-cat="">Todos</button>
+    </div>
+
+    <!-- INFO BAR -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <span id="sv-result-count" style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:1px;">
+        Cargando...
+      </span>
+    </div>
+
+    <!-- GRID DE PROYECTOS -->
+    <div class="sv-project-grid" id="sv-project-grid">
+      <!-- Skeletons iniciales -->
+    </div>
+
+    <!-- PAGINACIÓN -->
+    <div class="sv-pagination" id="sv-pagination"></div>
+
+    <div style="height:60px;"></div>
+  </div>
+
+  <script type="module">
+    import { renderNavbar, renderSkeletonCards, formatDate, formatNumber } from './js/ui.js';
+    import { API } from './js/api.js';
+
+    renderNavbar();
+
+    const CATEGORY_LABELS = {
+      CLIMA: 'Clima', FAUNA: 'Fauna', AGUA: 'Agua',
+      SUELO: 'Suelo', VEGETACION: 'Vegetación',
+      ATMOSFERA: 'Atmósfera', OTRO: 'Otro',
+    };
+
+    const CATEGORY_ICONS = {
+      CLIMA: '🌤', FAUNA: '🦎', AGUA: '💧',
+      SUELO: '🌍', VEGETACION: '🌿', ATMOSFERA: '🌬', OTRO: '◈',
+    };
+
+    const CATEGORY_COLORS = {
+      CLIMA: 'cyan', FAUNA: 'green', AGUA: 'teal',
+      SUELO: 'amber', VEGETACION: 'green', ATMOSFERA: 'cyan', OTRO: 'dim',
+    };
+
+    // Estado
+    let state = {
+      page: 1,
+      pageSize: 12,
+      q: '',
+      categoria: '',
+      ordering: '-publicado_en',
+      total: 0,
+      pages: 0,
+    };
+
+    let searchTimer;
+
+    // Cargar categorías disponibles
+    async function loadCategories() {
+      try {
+        const cats = await API.get('/api/proyectos/categorias/');
+        const pillsEl = document.getElementById('sv-cat-pills');
+        const allBtn = pillsEl.querySelector('[data-cat=""]');
+        const total = cats.reduce((s, c) => s + (c.total || 0), 0);
+        allBtn.textContent = `Todos (${total})`;
+
+        cats.forEach(cat => {
+          const btn = document.createElement('button');
+          btn.className = 'sv-cat-pill';
+          btn.dataset.cat = cat.categoria;
+          btn.textContent = `${CATEGORY_ICONS[cat.categoria] || '◈'} ${CATEGORY_LABELS[cat.categoria] || cat.categoria} (${cat.total})`;
+          pillsEl.appendChild(btn);
+        });
+
+        pillsEl.querySelectorAll('.sv-cat-pill').forEach(btn => {
+          btn.addEventListener('click', () => {
+            pillsEl.querySelectorAll('.sv-cat-pill').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('sv-cat-filter').value = btn.dataset.cat;
+            state.categoria = btn.dataset.cat;
+            state.page = 1;
+            loadProyectos();
+          });
+        });
+      } catch { /* no crítico */ }
+    }
+
+    // Cargar proyectos
+    async function loadProyectos() {
+      const grid = document.getElementById('sv-project-grid');
+      renderSkeletonCards(grid, 6);
+
+      const qp = new URLSearchParams({
+        page:      state.page,
+        page_size: state.pageSize,
+        ordering:  state.ordering,
+      });
+      if (state.q)         qp.set('q', state.q);
+      if (state.categoria) qp.set('categoria', state.categoria);
+
+      try {
+        const data = await API.get(`/api/proyectos/?${qp}`);
+        state.total = data.total || 0;
+        state.pages = data.pages || 1;
+
+        document.getElementById('sv-result-count').textContent =
+          `${state.total} proyecto${state.total !== 1 ? 's' : ''} encontrado${state.total !== 1 ? 's' : ''}`;
+
+        if (!data.results?.length) {
+          grid.innerHTML = `
+            <div class="sv-empty-state">
+              <div class="sv-empty-state-icon">🗺</div>
+              <p>No se encontraron proyectos con estos filtros.</p>
+            </div>
+          `;
+          document.getElementById('sv-pagination').innerHTML = '';
+          return;
+        }
+
+        grid.innerHTML = data.results.map(renderProyectoCard).join('');
+        renderPagination();
+
+      } catch (err) {
+        grid.innerHTML = `
+          <div class="sv-empty-state">
+            <div class="sv-empty-state-icon">⚠</div>
+            <p>Error al cargar proyectos. Intenta de nuevo.</p>
+          </div>
+        `;
+      }
+    }
+
+    function renderProyectoCard(p) {
+      const cat     = p.categoria || 'OTRO';
+      const color   = CATEGORY_COLORS[cat] || 'dim';
+      const icon    = CATEGORY_ICONS[cat]  || '◈';
+      const label   = CATEGORY_LABELS[cat] || cat;
+      const date    = formatDate(p.publicado_en || p.fecha_creacion);
+      const features = formatNumber(p.total_features || 0);
+
+      return `
+        <a href="proyecto.html?id=${p.id}" class="sv-project-card">
+          <div class="sv-project-thumb">
+            ${p.thumbnail
+              ? `<img src="${p.thumbnail}" alt="${p.titulo}" loading="lazy" />`
+              : `<div class="sv-project-thumb-placeholder">${icon}</div>`}
+            <div class="sv-project-thumb-overlay"></div>
+            <div class="sv-project-category">
+              <span class="sv-tag sv-tag-${color}">${icon} ${label}</span>
+            </div>
+          </div>
+          <div class="sv-project-body">
+            <div class="sv-project-title">${escapeHtml(p.titulo)}</div>
+            <div class="sv-project-author">@${escapeHtml(p.investigador_username || '')}</div>
+            <div class="sv-project-desc">${escapeHtml(p.descripcion || 'Sin descripción.')}</div>
+            <div class="sv-project-meta">
+              <span>◈ ${p.num_capas || 0} capas</span>
+              <span>▲ ${features} feat.</span>
+              <span>📅 ${date}</span>
+            </div>
+          </div>
+        </a>
+      `;
+    }
+
+    function renderPagination() {
+      const el = document.getElementById('sv-pagination');
+      if (state.pages <= 1) { el.innerHTML = ''; return; }
+
+      let html = `
+        <button class="sv-page-btn" id="pag-prev" ${state.page <= 1 ? 'disabled' : ''}>←</button>
+      `;
+
+      for (let i = 1; i <= state.pages; i++) {
+        if (i === 1 || i === state.pages || Math.abs(i - state.page) <= 2) {
+          html += `<button class="sv-page-btn ${i === state.page ? 'active' : ''}" data-page="${i}">${i}</button>`;
+        } else if (Math.abs(i - state.page) === 3) {
+          html += `<span class="sv-page-btn" style="cursor:default;border:none;">…</span>`;
+        }
+      }
+
+      html += `<button class="sv-page-btn" id="pag-next" ${state.page >= state.pages ? 'disabled' : ''}>→</button>`;
+      el.innerHTML = html;
+
+      el.querySelectorAll('[data-page]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.page = parseInt(btn.dataset.page);
+          loadProyectos();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      });
+
+      document.getElementById('pag-prev')?.addEventListener('click', () => {
+        if (state.page > 1) { state.page--; loadProyectos(); }
+      });
+
+      document.getElementById('pag-next')?.addEventListener('click', () => {
+        if (state.page < state.pages) { state.page++; loadProyectos(); }
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+
+    // Event listeners de filtros
+    document.getElementById('sv-search-input').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        state.q = e.target.value.trim();
+        state.page = 1;
+        loadProyectos();
+      }, 400);
+    });
+
+    document.getElementById('sv-cat-filter').addEventListener('change', (e) => {
+      state.categoria = e.target.value;
+      state.page = 1;
+      // Sync pills
+      document.querySelectorAll('.sv-cat-pill').forEach(b => {
+        b.classList.toggle('active', b.dataset.cat === state.categoria);
+      });
+      loadProyectos();
+    });
+
+    document.getElementById('sv-order-filter').addEventListener('change', (e) => {
+      state.ordering = e.target.value;
+      state.page = 1;
+      loadProyectos();
+    });
+
+    // Inicializar
+    loadCategories();
+    loadProyectos();
+  </script>
+</body>
+</html>

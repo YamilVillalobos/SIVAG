@@ -20,11 +20,13 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
+    'corsheaders',   # ← NUEVO: habilita CORS para el frontend
     'core',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',   # ← NUEVO: debe ir aquí, antes de CommonMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -161,5 +163,43 @@ DEFAULT_FROM_EMAIL = 'no-reply@sivag.ccgs.mx'
 
 # ── URL del frontend ──────────────────────────────────────────────────────────
 # Se usa para construir el enlace de recuperación de contraseña en los emails.
-# En producción cambiar por el dominio real: https://sivag.ccgs.mx
-FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+# DESARROLLO: Live Server de VS Code en puerto 5500
+# PRODUCCIÓN: cambiar por el dominio real → https://sivag.ccgs.mx
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://127.0.0.1:5500')
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# Orígenes permitidos en DESARROLLO (Live Server de VS Code).
+# PRODUCCIÓN: reemplazar con el dominio real → "https://sivag.ccgs.mx"
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5501",
+    "http://127.0.0.1:5501",
+    # Agregar aquí si usas otro puerto o herramienta en desarrollo:
+    # "http://localhost:3000",
+    # "http://localhost:8080",
+]
+
+# Permite enviar el header Authorization con el JWT desde el frontend.
+CORS_ALLOW_CREDENTIALS = True
+
+# Cabeceras que el frontend puede incluir en sus peticiones.
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# Métodos HTTP permitidos desde el frontend.
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]

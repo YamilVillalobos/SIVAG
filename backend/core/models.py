@@ -63,6 +63,7 @@ class CategoriaProyecto(models.TextChoices):
 
 class TipoArchivo(models.TextChoices):
     EXCEL    = "EXCEL",    _("Excel (.xlsx)")
+    CSV     = "CSV",     _("CSV (.csv)")
     SHAPE    = "SHAPE",    _("Shapefile (.zip)")
     GEOTIFF  = "GEOTIFF",  _("GeoTIFF (.tiff)")
 

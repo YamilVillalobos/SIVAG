@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nueva contraseña — SIVAG</title>
+  <link rel="stylesheet" href="css/sivag.css" />
+</head>
+<body>
+  <div class="sv-bg-grid"></div>
+  <div class="sv-bg-orb sv-bg-orb-1"></div>
+  <div class="sv-bg-orb sv-bg-orb-2"></div>
+
+  <div class="sv-auth-page">
+    <div class="sv-auth-container sv-page">
+
+      <a href="index.html">
+        <img src="assets/logo.svg" alt="SIVAG" class="sv-auth-logo" />
+      </a>
+
+      <div class="sv-auth-card">
+
+        <!-- Token inválido -->
+        <div id="sv-invalid-view" style="display:none;text-align:center;padding:20px 0;">
+          <div style="font-size:52px;margin-bottom:16px;">⚠</div>
+          <h2 style="font-family:var(--font-display);font-size:20px;color:var(--accent-red);margin-bottom:8px;">
+            Enlace inválido o expirado
+          </h2>
+          <p style="color:var(--text-secondary);font-size:13px;line-height:1.7;margin-bottom:24px;">
+            Este enlace de recuperación ha expirado o ya fue utilizado.<br>
+            Solicita un nuevo enlace desde la pantalla de recuperación.
+          </p>
+          <a href="recuperar.html" class="sv-btn sv-btn-primary sv-btn-block">
+            Solicitar nuevo enlace
+          </a>
+        </div>
+
+        <!-- Formulario nueva contraseña -->
+        <div id="sv-form-view">
+          <h1 class="sv-auth-title">Nueva contraseña</h1>
+          <p class="sv-auth-subtitle">Elige una contraseña segura</p>
+
+          <div id="sv-alert-container"></div>
+
+          <form id="sv-confirmar-form" novalidate>
+            <div class="sv-form-group">
+              <label class="sv-label" for="password_nuevo">Nueva contraseña</label>
+              <div class="sv-input-icon">
+                <span class="sv-icon">🔑</span>
+                <input
+                  type="password"
+                  id="password_nuevo"
+                  name="password_nuevo"
+                  class="sv-input"
+                  placeholder="Mínimo 8 caracteres"
+                  autocomplete="new-password"
+                  required
+                />
+                <button type="button" class="sv-eye-toggle" id="sv-eye-1">👁</button>
+              </div>
+              <div class="sv-pw-strength">
+                <div class="sv-pw-bar" id="pw-bar-1"></div>
+                <div class="sv-pw-bar" id="pw-bar-2"></div>
+                <div class="sv-pw-bar" id="pw-bar-3"></div>
+                <div class="sv-pw-bar" id="pw-bar-4"></div>
+              </div>
+              <span class="sv-field-error" id="password_nuevo-error" data-error="password_nuevo"></span>
+            </div>
+
+            <div class="sv-form-group">
+              <label class="sv-label" for="password_nuevo2">Confirmar contraseña</label>
+              <div class="sv-input-icon">
+                <span class="sv-icon">🔑</span>
+                <input
+                  type="password"
+                  id="password_nuevo2"
+                  name="password_nuevo2"
+                  class="sv-input"
+                  placeholder="Repite tu nueva contraseña"
+                  autocomplete="new-password"
+                  required
+                />
+                <button type="button" class="sv-eye-toggle" id="sv-eye-2">👁</button>
+              </div>
+              <span class="sv-field-error" id="password_nuevo2-error" data-error="password_nuevo2"></span>
+            </div>
+
+            <button type="submit" class="sv-btn sv-btn-primary sv-btn-block sv-btn-lg" id="sv-submit-btn">
+              🔒 Restablecer contraseña
+            </button>
+          </form>
+        </div>
+
+        <!-- Éxito -->
+        <div id="sv-success-view" style="display:none;text-align:center;padding:20px 0;">
+          <div style="font-size:52px;margin-bottom:16px;">✅</div>
+          <h2 style="font-family:var(--font-display);font-size:20px;color:var(--text-primary);margin-bottom:8px;">
+            Contraseña restablecida
+          </h2>
+          <p style="color:var(--text-secondary);font-size:13px;line-height:1.7;margin-bottom:24px;">
+            Tu contraseña ha sido cambiada exitosamente.<br>
+            Ya puedes iniciar sesión con tu nueva contraseña.
+          </p>
+          <a href="login.html" class="sv-btn sv-btn-primary sv-btn-block sv-btn-lg">
+            Iniciar sesión →
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { confirmarRecuperacion } from './js/auth.js';
+    import { showAlert, clearAlert, showFieldErrors, clearFieldErrors, setButtonLoading } from './js/ui.js';
+
+    // Extraer token de la URL
+    const params = new URLSearchParams(window.location.search);
+    const token  = params.get('token');
+
+    if (!token) {
+      document.getElementById('sv-form-view').style.display = 'none';
+      document.getElementById('sv-invalid-view').style.display = 'block';
+    }
+
+    // Toggle ojos
+    function makeEyeToggle(btnId, inputId) {
+      document.getElementById(btnId)?.addEventListener('click', () => {
+        const inp = document.getElementById(inputId);
+        inp.type = inp.type === 'text' ? 'password' : 'text';
+        document.getElementById(btnId).textContent = inp.type === 'text' ? '🙈' : '👁';
+      });
+    }
+    makeEyeToggle('sv-eye-1', 'password_nuevo');
+    makeEyeToggle('sv-eye-2', 'password_nuevo2');
+
+    // Fuerza de contraseña
+    document.getElementById('password_nuevo')?.addEventListener('input', function () {
+      const v = this.value;
+      const score = [
+        v.length >= 8,
+        /[A-Z]/.test(v),
+        /[0-9]/.test(v),
+        /[^A-Za-z0-9]/.test(v),
+      ].filter(Boolean).length;
+      const classes = ['', 'weak', 'fair', 'good', 'strong'];
+      for (let i = 1; i <= 4; i++) {
+        const bar = document.getElementById(`pw-bar-${i}`);
+        bar.className = 'sv-pw-bar';
+        if (i <= score) bar.classList.add(classes[score]);
+      }
+    });
+
+    const form      = document.getElementById('sv-confirmar-form');
+    const submitBtn = document.getElementById('sv-submit-btn');
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearAlert('sv-alert-container');
+      clearFieldErrors('sv-confirmar-form');
+
+      const password_nuevo  = document.getElementById('password_nuevo').value;
+      const password_nuevo2 = document.getElementById('password_nuevo2').value;
+
+      if (password_nuevo !== password_nuevo2) {
+        showFieldErrors({ password_nuevo2: 'Las contraseñas no coinciden.' });
+        return;
+      }
+
+      if (password_nuevo.length < 8) {
+        showFieldErrors({ password_nuevo: 'La contraseña debe tener al menos 8 caracteres.' });
+        return;
+      }
+
+      setButtonLoading(submitBtn, true);
+
+      try {
+        await confirmarRecuperacion(token, password_nuevo, password_nuevo2);
+        document.getElementById('sv-form-view').style.display   = 'none';
+        document.getElementById('sv-success-view').style.display = 'block';
+      } catch (err) {
+        setButtonLoading(submitBtn, false);
+        const fieldErrors = err.getFieldErrors?.() || {};
+        if (fieldErrors.token) {
+          // Token inválido
+          document.getElementById('sv-form-view').style.display  = 'none';
+          document.getElementById('sv-invalid-view').style.display = 'block';
+        } else if (Object.keys(fieldErrors).length > 0) {
+          showFieldErrors(fieldErrors, 'sv-confirmar-form');
+        } else {
+          showAlert('sv-alert-container', err.message || 'Error al restablecer la contraseña.', 'error');
+        }
+      }
+    });
+  </script>
+</body>
+</html>

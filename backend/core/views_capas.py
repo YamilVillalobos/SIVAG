@@ -86,6 +86,7 @@ def _md5(filepath: str) -> str:
 
 ALLOWED_EXTENSIONS = {
     TipoArchivo.EXCEL:   [".xlsx"],
+    TipoArchivo.CSV:     [".csv"],
     TipoArchivo.SHAPE:   [".zip"],
     TipoArchivo.GEOTIFF: [".tiff", ".tif"],
 }

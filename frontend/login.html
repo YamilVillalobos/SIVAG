@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Iniciar sesión — SIVAG</title>
+  <link rel="stylesheet" href="css/sivag.css" />
+</head>
+<body>
+  <div class="sv-bg-grid"></div>
+  <div class="sv-bg-orb sv-bg-orb-1"></div>
+  <div class="sv-bg-orb sv-bg-orb-2"></div>
+
+  <div class="sv-auth-page">
+    <div class="sv-auth-container sv-page">
+
+      <a href="index.html">
+        <img src="assets/logo.svg" alt="SIVAG" class="sv-auth-logo" />
+      </a>
+
+      <div class="sv-auth-card">
+        <!-- Alerta de sesión expirada -->
+        <div id="sv-session-alert"></div>
+
+        <h1 class="sv-auth-title">Bienvenido de vuelta</h1>
+        <p class="sv-auth-subtitle">Accede a tu cuenta SIVAG</p>
+
+        <!-- Alerta general -->
+        <div id="sv-alert-container"></div>
+
+        <form id="sv-login-form" novalidate>
+          <div class="sv-form-group">
+            <label class="sv-label" for="email">Correo electrónico</label>
+            <div class="sv-input-icon">
+              <span class="sv-icon">✉</span>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                class="sv-input"
+                placeholder="investigador@ejemplo.com"
+                autocomplete="email"
+                required
+              />
+            </div>
+            <span class="sv-field-error" id="email-error" data-error="email"></span>
+          </div>
+
+          <div class="sv-form-group">
+            <label class="sv-label" for="password">Contraseña</label>
+            <div class="sv-input-icon">
+              <span class="sv-icon">🔑</span>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                class="sv-input"
+                placeholder="••••••••"
+                autocomplete="current-password"
+                required
+              />
+              <button type="button" class="sv-eye-toggle" id="sv-eye-toggle" aria-label="Mostrar contraseña">
+                👁
+              </button>
+            </div>
+            <span class="sv-field-error" id="password-error" data-error="password"></span>
+          </div>
+
+          <div style="text-align:right;margin-bottom:20px;">
+            <a href="recuperar.html" style="font-family:var(--font-mono);font-size:11px;color:var(--accent-cyan);text-decoration:none;letter-spacing:0.5px;">
+              ¿Olvidaste tu contraseña?
+            </a>
+          </div>
+
+          <button type="submit" class="sv-btn sv-btn-primary sv-btn-block sv-btn-lg" id="sv-submit-btn">
+            ◈ Iniciar sesión
+          </button>
+        </form>
+
+        <div class="sv-divider-text">¿No tienes cuenta?</div>
+
+        <a href="registro.html" class="sv-btn sv-btn-outline sv-btn-block">
+          Crear cuenta nueva
+        </a>
+      </div>
+
+      <p style="text-align:center;margin-top:20px;font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1px;">
+        © 2025 SIVAG · CCGS
+      </p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { login } from './js/auth.js';
+    import { Router } from './js/router.js';
+    import { showAlert, clearAlert, showFieldErrors, clearFieldErrors, setButtonLoading } from './js/ui.js';
+
+    // Si ya está autenticado, redirigir
+    Router.redirectIfAuthenticated();
+
+    // Mostrar alerta si la sesión expiró
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reason') === 'expired') {
+      showAlert('sv-session-alert', 'Tu sesión ha expirado. Por favor inicia sesión de nuevo.', 'warning', false);
+    }
+
+    // Toggle contraseña visible
+    document.getElementById('sv-eye-toggle').addEventListener('click', function () {
+      const input = document.getElementById('password');
+      const isText = input.type === 'text';
+      input.type = isText ? 'password' : 'text';
+      this.textContent = isText ? '👁' : '🙈';
+    });
+
+    // Submit
+    const form = document.getElementById('sv-login-form');
+    const submitBtn = document.getElementById('sv-submit-btn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearAlert('sv-alert-container');
+      clearFieldErrors('sv-login-form');
+
+      const email    = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      // Validación básica frontend
+      if (!email) {
+        showFieldErrors({ email: 'El correo es requerido.' });
+        return;
+      }
+      if (!password) {
+        showFieldErrors({ password: 'La contraseña es requerida.' });
+        return;
+      }
+
+      setButtonLoading(submitBtn, true);
+
+      try {
+        await login(email, password);
+        // Éxito
+        showAlert('sv-alert-container', '¡Sesión iniciada! Redirigiendo...', 'success', false);
+        setTimeout(() => Router.postLoginRedirect(), 800);
+
+      } catch (err) {
+        setButtonLoading(submitBtn, false);
+
+        const fieldErrors = err.getFieldErrors?.() || {};
+        if (Object.keys(fieldErrors).length > 0) {
+          showFieldErrors(fieldErrors);
+        } else {
+          showAlert('sv-alert-container', err.message || 'Credenciales incorrectas.', 'error');
+        }
+      }
+    });
+  </script>
+</body>
+</html>

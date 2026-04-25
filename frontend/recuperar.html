@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recuperar contraseña — SIVAG</title>
+  <link rel="stylesheet" href="css/sivag.css" />
+</head>
+<body>
+  <div class="sv-bg-grid"></div>
+  <div class="sv-bg-orb sv-bg-orb-1"></div>
+  <div class="sv-bg-orb sv-bg-orb-2"></div>
+
+  <div class="sv-auth-page">
+    <div class="sv-auth-container sv-page">
+
+      <a href="index.html">
+        <img src="assets/logo.svg" alt="SIVAG" class="sv-auth-logo" />
+      </a>
+
+      <div class="sv-auth-card">
+
+        <!-- Estado: formulario -->
+        <div id="sv-form-view">
+          <h1 class="sv-auth-title">Recuperar contraseña</h1>
+          <p class="sv-auth-subtitle">Te enviaremos un enlace de recuperación</p>
+
+          <div id="sv-alert-container"></div>
+
+          <form id="sv-recuperar-form" novalidate>
+            <div class="sv-form-group">
+              <label class="sv-label" for="email">Correo electrónico de tu cuenta</label>
+              <div class="sv-input-icon">
+                <span class="sv-icon">✉</span>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  class="sv-input"
+                  placeholder="correo@ejemplo.com"
+                  autocomplete="email"
+                  required
+                />
+              </div>
+              <span class="sv-field-error" id="email-error" data-error="email"></span>
+            </div>
+
+            <button type="submit" class="sv-btn sv-btn-primary sv-btn-block sv-btn-lg" id="sv-submit-btn">
+              ✉ Enviar enlace de recuperación
+            </button>
+          </form>
+        </div>
+
+        <!-- Estado: enviado -->
+        <div id="sv-sent-view" style="display:none;text-align:center;padding:20px 0;">
+          <div style="font-size:52px;margin-bottom:16px;">📬</div>
+          <h2 style="font-family:var(--font-display);font-size:20px;color:var(--text-primary);margin-bottom:8px;">
+            Enlace enviado
+          </h2>
+          <p style="color:var(--text-secondary);font-size:13px;line-height:1.7;margin-bottom:24px;">
+            Si existe una cuenta asociada a ese correo, recibirás un enlace para restablecer tu contraseña.<br>
+            El enlace expira en <span style="color:var(--accent-cyan);">1 hora</span>.
+          </p>
+          <a href="login.html" class="sv-btn sv-btn-outline sv-btn-block">
+            ← Volver a iniciar sesión
+          </a>
+        </div>
+
+        <div class="sv-divider-text" id="sv-divider-back">¿Recuerdas tu contraseña?</div>
+        <a href="login.html" class="sv-btn sv-btn-ghost sv-btn-block" id="sv-back-link">
+          ← Volver a iniciar sesión
+        </a>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module">
+    import { solicitarRecuperacion } from './js/auth.js';
+    import { showAlert, clearAlert, showFieldErrors, setButtonLoading } from './js/ui.js';
+
+    const form      = document.getElementById('sv-recuperar-form');
+    const submitBtn = document.getElementById('sv-submit-btn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearAlert('sv-alert-container');
+
+      const email = document.getElementById('email').value.trim();
+      if (!email) {
+        showFieldErrors({ email: 'Ingresa tu correo electrónico.' });
+        return;
+      }
+
+      setButtonLoading(submitBtn, true);
+
+      try {
+        await solicitarRecuperacion(email);
+        // Siempre mostrar éxito (el backend no revela si el email existe)
+        document.getElementById('sv-form-view').style.display = 'none';
+        document.getElementById('sv-sent-view').style.display = 'block';
+        document.getElementById('sv-divider-back').style.display = 'none';
+        document.getElementById('sv-back-link').style.display = 'none';
+      } catch (err) {
+        setButtonLoading(submitBtn, false);
+        showAlert('sv-alert-container', err.message || 'Error al procesar la solicitud.', 'error');
+      }
+    });
+  </script>
+</body>
+</html>
