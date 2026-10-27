@@ -37,6 +37,7 @@ urlpatterns = [
     # ── Próximos módulos (descomentar conforme avance el desarrollo) ────────
     # path("api/dashboard/",  include("core.urls_dashboard",  namespace="dashboard")),
     # path("api/admin/",      include("core.urls_admin",       namespace="sivag-admin")),
+    path("api/chat/", include("core.urls_chat", namespace="chat")),
 ]
 
 # ── Archivos media en desarrollo ───────────────────────────────────────────

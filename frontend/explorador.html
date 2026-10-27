@@ -3,234 +3,433 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Explorador de proyectos — SIVAG</title>
+  <title>Explorador — SIVAG</title>
   <link rel="stylesheet" href="css/sivag.css" />
   <style>
-    .sv-explorador-header {
-      padding: 48px 0 32px;
-      position: relative;
-      z-index: 1;
-    }
+    /* ══ SIDENAV DE NAVEGACIÓN ══════════════════════════════ */
+    html, body { height:100%; overflow:hidden; margin:0; padding:0; }
+    body { display:flex; flex-direction:column; }
 
-    .sv-empty-state {
-      grid-column: 1 / -1;
-      text-align: center;
-      padding: 60px 20px;
-      color: var(--text-muted);
-    }
-
-    .sv-empty-state-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-      opacity: 0.5;
-    }
-
-    .sv-empty-state p {
-      font-family: var(--font-mono);
-      font-size: 12px;
-      letter-spacing: 1px;
-    }
-
-    .sv-pagination {
+    .sv-app-shell {
       display: flex;
-      justify-content: center;
-      gap: 8px;
-      margin-top: 40px;
+      flex: 1;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .sv-sidenav {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--bg-dark);
+      border-right: 1px solid var(--border-dim);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 100;
+      transition: width 0.28s cubic-bezier(.4,0,.2,1);
+    }
+
+    .sv-sidenav.collapsed { width: 58px; }
+
+    .sv-sidenav-logo {
+      display: flex; align-items: center; gap: 10px;
+      padding: 18px 14px 14px;
+      border-bottom: 1px solid var(--border-dim);
+      text-decoration: none; overflow: hidden; flex-shrink: 0;
+    }
+
+    .sv-sidenav-logo-mark {
+      width: 30px; height: 30px; border-radius: var(--radius-md);
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-teal));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 900; color: var(--bg-deep); flex-shrink: 0;
+    }
+
+    .sv-sidenav-logo-text {
+      font-family: var(--font-display); font-size: 15px; font-weight: 900;
+      color: var(--text-primary); letter-spacing: 2px; white-space: nowrap;
+    }
+
+    .sv-sidenav-logo-sub {
+      font-family: var(--font-mono); font-size: 7px; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--text-muted); white-space: nowrap;
+    }
+
+    .sv-sidenav-user {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-dim);
+      overflow: hidden; flex-shrink: 0;
+    }
+
+    .sv-sidenav-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-size: 13px; font-weight: 700;
+      color: #fff; flex-shrink: 0;
+    }
+
+    .sv-sidenav-user-name {
+      font-family: var(--font-display); font-size: 12px; font-weight: 600;
+      color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .sv-sidenav-user-role {
+      font-family: var(--font-mono); font-size: 9px;
+      letter-spacing: 1px; text-transform: uppercase; color: var(--accent-cyan); margin-top: 1px;
+    }
+
+    .sv-sidenav-nav {
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+      padding: 8px; scrollbar-width: none;
+    }
+
+    .sv-sidenav-section {
+      font-family: var(--font-mono); font-size: 8px;
+      letter-spacing: 2px; text-transform: uppercase;
+      color: var(--text-muted); padding: 8px 8px 3px;
+      white-space: nowrap; overflow: hidden;
+    }
+
+    .sv-nav-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8px 10px; border-radius: var(--radius-md);
+      text-decoration: none; color: var(--text-secondary);
+      font-family: var(--font-display); font-size: 13px; font-weight: 500;
+      transition: var(--transition); border: 1px solid transparent;
+      margin-bottom: 2px; white-space: nowrap; overflow: hidden; cursor: pointer;
+    }
+
+    .sv-nav-item:hover { background:var(--bg-glass); color:var(--text-primary); border-color:var(--border-dim); }
+    .sv-nav-item.active { background:rgba(0,212,255,0.1); color:var(--accent-cyan); border-color:rgba(0,212,255,0.2); }
+    .sv-nav-icon { font-size:14px; flex-shrink:0; width:18px; text-align:center; }
+    .sv-nav-label { flex:1; overflow:hidden; text-overflow:ellipsis; }
+
+    .sv-sidenav-footer {
+      padding: 8px; border-top: 1px solid var(--border-dim); flex-shrink: 0;
+    }
+
+    .sv-sidenav-footer-btn {
+      display: flex; align-items: center; gap: 8px;
+      width: 100%; padding: 7px 10px;
+      background: none; border: 1px solid var(--border-dim);
+      border-radius: var(--radius-md); color: var(--text-muted);
+      font-family: var(--font-mono); font-size: 10px;
+      cursor: pointer; transition: var(--transition);
+      white-space: nowrap; overflow: hidden; margin-bottom: 4px;
+    }
+
+    .sv-sidenav-footer-btn:hover { color:var(--accent-cyan); border-color:rgba(0,212,255,0.3); }
+    .sv-sidenav-footer-btn.danger:hover { color:#ff6b6b; border-color:rgba(255,107,107,0.3); }
+
+    /* Collapsed */
+    .sv-sidenav.collapsed .sv-sidenav-logo-text,
+    .sv-sidenav.collapsed .sv-sidenav-logo-sub,
+    .sv-sidenav.collapsed .sv-sidenav-user-name,
+    .sv-sidenav.collapsed .sv-sidenav-user-role,
+    .sv-sidenav.collapsed .sv-nav-label,
+    .sv-sidenav.collapsed .sv-sidenav-section,
+    .sv-sidenav.collapsed .sv-sidenav-footer-label { display:none; }
+
+    .sv-sidenav.collapsed .sv-nav-item   { justify-content:center; padding:9px; }
+    .sv-sidenav.collapsed .sv-sidenav-user { justify-content:center; }
+    .sv-sidenav.collapsed .sv-sidenav-logo { justify-content:center; padding:18px 0 14px; }
+    .sv-sidenav.collapsed .sv-sidenav-footer-btn { justify-content:center; }
+
+    /* Main content area */
+    .sv-page-main {
+      flex: 1; min-width: 0;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sv-page-scroll {
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+    }
+
+    html, body { height: 100%; overflow: hidden; }
+    body { display: flex; }
+
+    /* App shell */
+    #sv-app-shell {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Contenido scrollable */
+    .sv-explorador-main {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-width: 0;
+    }
+
+    /* Topbar */
+    .sv-explorador-topbar {
+      padding: 24px 32px 20px;
+      border-bottom: 1px solid var(--border-dim);
+      background: var(--bg-dark);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .sv-explorador-topbar h1 {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--text-primary);
+      margin: 0 0 2px;
+    }
+
+    .sv-explorador-topbar h1 span { color: var(--accent-cyan); }
+
+    .sv-explorador-topbar p {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      margin: 0;
+    }
+
+    /* Body content */
+    .sv-explorador-body { padding: 24px 32px 48px; }
+
+    /* Filter bar */
+    .sv-expl-filters {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
       flex-wrap: wrap;
     }
 
-    .sv-page-btn {
-      width: 36px; height: 36px;
-      display: flex; align-items: center; justify-content: center;
-      border-radius: var(--radius-sm);
-      font-family: var(--font-mono);
-      font-size: 12px;
-      cursor: pointer;
-      border: 1px solid var(--border-dim);
-      background: var(--bg-card);
-      color: var(--text-secondary);
-      transition: var(--transition);
-    }
+    .sv-expl-filters .sv-input-icon { flex: 1; min-width: 200px; }
 
-    .sv-page-btn:hover {
-      border-color: var(--accent-cyan);
-      color: var(--accent-cyan);
-    }
-
-    .sv-page-btn.active {
-      background: var(--accent-cyan);
-      color: var(--bg-deep);
-      border-color: var(--accent-cyan);
-      font-weight: 700;
-    }
-
-    .sv-page-btn:disabled {
-      opacity: 0.3;
-      cursor: not-allowed;
-    }
-
+    /* Pills */
     .sv-category-pills {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .sv-cat-pill {
-      padding: 5px 14px;
+      padding: 4px 14px;
       border-radius: 20px;
       font-family: var(--font-mono);
-      font-size: 10px;
-      letter-spacing: 1px;
+      font-size: 10px; letter-spacing: 1px;
       text-transform: uppercase;
       border: 1px solid var(--border-dim);
       background: var(--bg-card);
       color: var(--text-secondary);
+      cursor: pointer; transition: var(--transition);
+    }
+
+    .sv-cat-pill:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+    .sv-cat-pill.active {
+      background: rgba(0,212,255,0.12);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    /* Result count */
+    .sv-result-count {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+
+    /* Pagination */
+    .sv-pagination {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 32px;
+      flex-wrap: wrap;
+    }
+
+    .sv-page-btn {
+      width: 34px; height: 34px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono); font-size: 12px;
       cursor: pointer;
+      border: 1px solid var(--border-dim);
+      background: var(--bg-card);
+      color: var(--text-secondary);
       transition: var(--transition);
     }
 
-    .sv-cat-pill:hover {
-      border-color: var(--accent-cyan);
-      color: var(--accent-cyan);
+    .sv-page-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+    .sv-page-btn.active { background: var(--accent-cyan); color: var(--bg-deep); border-color: var(--accent-cyan); font-weight: 700; }
+    .sv-page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* Card map btn */
+    .sv-card-map-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin-top: 10px; padding: 5px 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-dim);
+      background: var(--bg-glass);
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      text-decoration: none; transition: var(--transition);
+      width: 100%; justify-content: center;
     }
 
-    .sv-cat-pill.active {
-      background: rgba(0, 212, 255, 0.15);
-      border-color: var(--accent-cyan);
-      color: var(--accent-cyan);
+    .sv-card-map-btn:hover {
+      border-color: var(--accent-cyan); color: var(--accent-cyan);
+      background: rgba(0,212,255,0.08); text-decoration: none;
     }
+
+    /* Empty state */
+    .sv-empty-state {
+      grid-column: 1/-1; text-align: center;
+      padding: 60px 20px; color: var(--text-muted);
+    }
+
+    .sv-empty-state-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+    .sv-empty-state p { font-family: var(--font-mono); font-size: 12px; letter-spacing: 1px; }
   </style>
 </head>
 <body>
-  <div class="sv-bg-grid"></div>
-  <div class="sv-bg-orb sv-bg-orb-1"></div>
-  <div class="sv-bg-orb sv-bg-orb-2"></div>
+  <div class="sv-bg-grid" style="position:fixed;"></div>
+  <div class="sv-bg-orb sv-bg-orb-1" style="position:fixed;"></div>
+  <div class="sv-bg-orb sv-bg-orb-2" style="position:fixed;"></div>
 
-  <!-- NAVBAR -->
-  <nav class="sv-navbar" id="sv-main-navbar">
-    <a href="index.html" class="sv-navbar-logo">
-      <img src="assets/logo.svg" alt="SIVAG" />
-    </a>
-    <ul class="sv-navbar-nav" id="sv-navbar-nav"></ul>
-    <div id="sv-user-badge-wrap"></div>
-    <button class="sv-navbar-toggler" id="sv-navbar-toggler">☰</button>
-  </nav>
+  <!-- App shell — sidenav se inyecta aquí por JS -->
+  <div id="sv-app-shell">
 
-  <div style="max-width:1200px;margin:0 auto;padding:0 2rem;position:relative;z-index:1;">
-
-    <!-- HEADER -->
-    <div class="sv-explorador-header sv-page">
-      <span class="sv-eyebrow">Proyectos públicos</span>
-      <h1 class="sv-section-title">Explorador <span>Geoespacial</span></h1>
-      <p style="color:var(--text-secondary);font-size:14px;margin-top:8px;max-width:560px;">
-        Descubre proyectos de investigación geoespacial publicados por la comunidad científica.
-      </p>
-    </div>
-
-    <!-- FILTROS -->
-    <div class="sv-filter-bar">
-      <div style="flex:1;min-width:200px;">
-        <div class="sv-input-icon">
-          <span class="sv-icon" style="font-size:12px;">🔍</span>
-          <input
-            type="text"
-            id="sv-search-input"
-            class="sv-input"
-            placeholder="Buscar proyectos..."
-            style="padding-left:36px;"
-          />
+    <!-- ══ SIDENAV DE NAVEGACIÓN ══ -->
+    <aside class="sv-sidenav" id="sv-sidenav">
+      <a href="panel.html" class="sv-sidenav-logo">
+        <div class="sv-sidenav-logo-mark">S</div>
+        <div>
+          <div class="sv-sidenav-logo-text">SIVAG</div>
+          <div class="sv-sidenav-logo-sub">Geoespacial</div>
+        </div>
+      </a>
+      <div class="sv-sidenav-user">
+        <div class="sv-sidenav-avatar" id="sv-nav-avatar">Y</div>
+        <div style="overflow:hidden;">
+          <div class="sv-sidenav-user-name" id="sv-nav-nombre">Usuario</div>
+          <div class="sv-sidenav-user-role" id="sv-nav-rol">Investigador</div>
         </div>
       </div>
-      <select id="sv-cat-filter" class="sv-filter-select">
-        <option value="">Todas las categorías</option>
-        <option value="CLIMA">Clima</option>
-        <option value="FAUNA">Fauna</option>
-        <option value="AGUA">Agua</option>
-        <option value="SUELO">Suelo</option>
-        <option value="VEGETACION">Vegetación</option>
-        <option value="ATMOSFERA">Atmósfera</option>
-        <option value="OTRO">Otro</option>
-      </select>
-      <select id="sv-order-filter" class="sv-filter-select">
-        <option value="-publicado_en">Más recientes</option>
-        <option value="titulo">A–Z</option>
-        <option value="-fecha_actualizacion">Última actualización</option>
-      </select>
-    </div>
+      <nav class="sv-sidenav-nav">
+        <div class="sv-sidenav-section">Principal</div>
+        <a href="panel.html" class="sv-nav-item" data-nav="panel">
+          <span class="sv-nav-icon">◈</span><span class="sv-nav-label">Panel principal</span>
+        </a>
+        <a href="explorador.html" class="sv-nav-item active" data-nav="explorador">
+          <span class="sv-nav-icon">🌐</span><span class="sv-nav-label">Explorador</span>
+        </a>
+        <div class="sv-sidenav-section" style="margin-top:6px;">Cuenta</div>
+        <a href="#" class="sv-nav-item" data-nav="perfil">
+          <span class="sv-nav-icon">👤</span><span class="sv-nav-label">Mi perfil</span>
+        </a>
+        <a href="#" class="sv-nav-item" data-nav="ajustes">
+          <span class="sv-nav-icon">⚙</span><span class="sv-nav-label">Ajustes</span>
+        </a>
+      </nav>
+      <div class="sv-sidenav-footer">
+        <button class="sv-sidenav-footer-btn" id="sv-nav-collapse-btn">
+          <span id="sv-nav-collapse-icon">◁</span>
+          <span class="sv-sidenav-footer-label">Colapsar</span>
+        </button>
+        <button class="sv-sidenav-footer-btn danger" id="sv-nav-logout-btn">
+          <span>⎋</span>
+          <span class="sv-sidenav-footer-label">Cerrar sesión</span>
+        </button>
+      </div>
+    </aside>
 
-    <!-- PILLS DE CATEGORÍAS (cargadas desde API) -->
-    <div class="sv-category-pills" id="sv-cat-pills">
-      <button class="sv-cat-pill active" data-cat="">Todos</button>
-    </div>
+    <!-- Contenido principal -->
+    <main class="sv-explorador-main">
 
-    <!-- INFO BAR -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-      <span id="sv-result-count" style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:1px;">
-        Cargando...
-      </span>
-    </div>
+      <!-- Topbar -->
+      <div class="sv-explorador-topbar">
+        <span style="font-family:var(--font-mono);font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);">
+          Proyectos públicos
+        </span>
+        <h1>Explorador <span>Geoespacial</span></h1>
+        <p>Descubre proyectos de investigación geoespacial publicados por la comunidad científica.</p>
+      </div>
 
-    <!-- GRID DE PROYECTOS -->
-    <div class="sv-project-grid" id="sv-project-grid">
-      <!-- Skeletons iniciales -->
-    </div>
+      <!-- Body -->
+      <div class="sv-explorador-body">
 
-    <!-- PAGINACIÓN -->
-    <div class="sv-pagination" id="sv-pagination"></div>
+        <!-- Filtros -->
+        <div class="sv-expl-filters">
+          <div class="sv-input-icon">
+            <span class="sv-icon" style="font-size:12px;">🔍</span>
+            <input type="text" id="sv-search-input" class="sv-input"
+              placeholder="Buscar proyectos..." style="padding-left:36px;" />
+          </div>
+          <select id="sv-cat-filter" class="sv-filter-select">
+            <option value="">Todas las categorías</option>
+            <option value="CLIMA">Clima</option>
+            <option value="FAUNA">Fauna</option>
+            <option value="AGUA">Agua</option>
+            <option value="SUELO">Suelo</option>
+            <option value="VEGETACION">Vegetación</option>
+            <option value="ATMOSFERA">Atmósfera</option>
+            <option value="OTRO">Otro</option>
+          </select>
+          <select id="sv-order-filter" class="sv-filter-select">
+            <option value="-publicado_en">Más recientes</option>
+            <option value="titulo">A–Z</option>
+            <option value="-fecha_actualizacion">Última actualización</option>
+          </select>
+        </div>
 
-    <div style="height:60px;"></div>
+        <!-- Pills de categorías -->
+        <div class="sv-category-pills" id="sv-cat-pills">
+          <button class="sv-cat-pill active" data-cat="">Todos</button>
+        </div>
+
+        <!-- Contador -->
+        <p class="sv-result-count" id="sv-result-count">Cargando...</p>
+
+        <!-- Grid de proyectos -->
+        <div class="sv-project-grid" id="sv-project-grid"></div>
+
+        <!-- Paginación -->
+        <div class="sv-pagination" id="sv-pagination"></div>
+
+      </div>
+    </main>
   </div>
 
   <script type="module">
-    import { renderNavbar, renderSkeletonCards, formatDate, formatNumber } from './js/ui.js';
+    import { renderSkeletonCards, formatDate, formatNumber } from './js/ui.js';
     import { API } from './js/api.js';
 
-    renderNavbar();
+    const CATEGORY_LABELS = { CLIMA:'Clima', FAUNA:'Fauna', AGUA:'Agua', SUELO:'Suelo', VEGETACION:'Vegetación', ATMOSFERA:'Atmósfera', OTRO:'Otro' };
+    const CATEGORY_ICONS  = { CLIMA:'🌤', FAUNA:'🦎', AGUA:'💧', SUELO:'🌍', VEGETACION:'🌿', ATMOSFERA:'🌬', OTRO:'◈' };
+    const CATEGORY_COLORS = { CLIMA:'cyan', FAUNA:'green', AGUA:'teal', SUELO:'amber', VEGETACION:'green', ATMOSFERA:'cyan', OTRO:'dim' };
 
-    const CATEGORY_LABELS = {
-      CLIMA: 'Clima', FAUNA: 'Fauna', AGUA: 'Agua',
-      SUELO: 'Suelo', VEGETACION: 'Vegetación',
-      ATMOSFERA: 'Atmósfera', OTRO: 'Otro',
-    };
-
-    const CATEGORY_ICONS = {
-      CLIMA: '🌤', FAUNA: '🦎', AGUA: '💧',
-      SUELO: '🌍', VEGETACION: '🌿', ATMOSFERA: '🌬', OTRO: '◈',
-    };
-
-    const CATEGORY_COLORS = {
-      CLIMA: 'cyan', FAUNA: 'green', AGUA: 'teal',
-      SUELO: 'amber', VEGETACION: 'green', ATMOSFERA: 'cyan', OTRO: 'dim',
-    };
-
-    // Estado
-    let state = {
-      page: 1,
-      pageSize: 12,
-      q: '',
-      categoria: '',
-      ordering: '-publicado_en',
-      total: 0,
-      pages: 0,
-    };
-
+    let state = { page:1, pageSize:12, q:'', categoria:'', ordering:'-publicado_en', total:0, pages:0 };
     let searchTimer;
 
-    // Cargar categorías disponibles
     async function loadCategories() {
       try {
-        const cats = await API.get('/api/proyectos/categorias/');
+        const cats   = await API.get('/api/proyectos/categorias/');
         const pillsEl = document.getElementById('sv-cat-pills');
-        const allBtn = pillsEl.querySelector('[data-cat=""]');
-        const total = cats.reduce((s, c) => s + (c.total || 0), 0);
+        const allBtn  = pillsEl.querySelector('[data-cat=""]');
+        const total   = cats.reduce((s,c) => s+(c.total||0), 0);
         allBtn.textContent = `Todos (${total})`;
 
         cats.forEach(cat => {
           const btn = document.createElement('button');
           btn.className = 'sv-cat-pill';
           btn.dataset.cat = cat.categoria;
-          btn.textContent = `${CATEGORY_ICONS[cat.categoria] || '◈'} ${CATEGORY_LABELS[cat.categoria] || cat.categoria} (${cat.total})`;
+          btn.textContent = `${CATEGORY_ICONS[cat.categoria]||'◈'} ${CATEGORY_LABELS[cat.categoria]||cat.categoria} (${cat.total})`;
           pillsEl.appendChild(btn);
         });
 
@@ -239,24 +438,17 @@
             pillsEl.querySelectorAll('.sv-cat-pill').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById('sv-cat-filter').value = btn.dataset.cat;
-            state.categoria = btn.dataset.cat;
-            state.page = 1;
-            loadProyectos();
+            state.categoria = btn.dataset.cat; state.page = 1; loadProyectos();
           });
         });
-      } catch { /* no crítico */ }
+      } catch {}
     }
 
-    // Cargar proyectos
     async function loadProyectos() {
       const grid = document.getElementById('sv-project-grid');
       renderSkeletonCards(grid, 6);
 
-      const qp = new URLSearchParams({
-        page:      state.page,
-        page_size: state.pageSize,
-        ordering:  state.ordering,
-      });
+      const qp = new URLSearchParams({ page:state.page, page_size:state.pageSize, ordering:state.ordering });
       if (state.q)         qp.set('q', state.q);
       if (state.categoria) qp.set('categoria', state.categoria);
 
@@ -266,132 +458,120 @@
         state.pages = data.pages || 1;
 
         document.getElementById('sv-result-count').textContent =
-          `${state.total} proyecto${state.total !== 1 ? 's' : ''} encontrado${state.total !== 1 ? 's' : ''}`;
+          `${state.total} proyecto${state.total!==1?'s':''} encontrado${state.total!==1?'s':''}`;
 
         if (!data.results?.length) {
-          grid.innerHTML = `
-            <div class="sv-empty-state">
-              <div class="sv-empty-state-icon">🗺</div>
-              <p>No se encontraron proyectos con estos filtros.</p>
-            </div>
-          `;
+          grid.innerHTML = `<div class="sv-empty-state"><div class="sv-empty-state-icon">🗺</div><p>No se encontraron proyectos con estos filtros.</p></div>`;
           document.getElementById('sv-pagination').innerHTML = '';
           return;
         }
 
-        grid.innerHTML = data.results.map(renderProyectoCard).join('');
+        grid.innerHTML = data.results.map(renderCard).join('');
         renderPagination();
-
-      } catch (err) {
-        grid.innerHTML = `
-          <div class="sv-empty-state">
-            <div class="sv-empty-state-icon">⚠</div>
-            <p>Error al cargar proyectos. Intenta de nuevo.</p>
-          </div>
-        `;
+      } catch {
+        grid.innerHTML = `<div class="sv-empty-state"><div class="sv-empty-state-icon">⚠</div><p>Error al cargar proyectos.</p></div>`;
       }
     }
 
-    function renderProyectoCard(p) {
-      const cat     = p.categoria || 'OTRO';
-      const color   = CATEGORY_COLORS[cat] || 'dim';
-      const icon    = CATEGORY_ICONS[cat]  || '◈';
-      const label   = CATEGORY_LABELS[cat] || cat;
-      const date    = formatDate(p.publicado_en || p.fecha_creacion);
-      const features = formatNumber(p.total_features || 0);
+    function renderCard(p) {
+      const cat   = p.categoria || 'OTRO';
+      const color = CATEGORY_COLORS[cat] || 'dim';
+      const icon  = CATEGORY_ICONS[cat]  || '◈';
+      const label = CATEGORY_LABELS[cat] || cat;
+      const date  = formatDate(p.publicado_en || p.fecha_creacion);
+      const feats = formatNumber(p.total_features || 0);
+      const ok    = (p.capas_aprobadas || 0) > 0;
 
       return `
-        <a href="proyecto.html?id=${p.id}" class="sv-project-card">
+        <div class="sv-project-card" style="cursor:default;">
           <div class="sv-project-thumb">
-            ${p.thumbnail
-              ? `<img src="${p.thumbnail}" alt="${p.titulo}" loading="lazy" />`
-              : `<div class="sv-project-thumb-placeholder">${icon}</div>`}
+            ${p.thumbnail ? `<img src="${p.thumbnail}" alt="${esc(p.titulo)}" loading="lazy" />` : `<div class="sv-project-thumb-placeholder">${icon}</div>`}
             <div class="sv-project-thumb-overlay"></div>
-            <div class="sv-project-category">
-              <span class="sv-tag sv-tag-${color}">${icon} ${label}</span>
-            </div>
+            <div class="sv-project-category"><span class="sv-tag sv-tag-${color}">${icon} ${label}</span></div>
           </div>
           <div class="sv-project-body">
-            <div class="sv-project-title">${escapeHtml(p.titulo)}</div>
-            <div class="sv-project-author">@${escapeHtml(p.investigador_username || '')}</div>
-            <div class="sv-project-desc">${escapeHtml(p.descripcion || 'Sin descripción.')}</div>
+            <div class="sv-project-title">${esc(p.titulo)}</div>
+            <div class="sv-project-author">@${esc(p.investigador_username||'')}</div>
+            <div class="sv-project-desc">${esc(p.descripcion||'Sin descripción.')}</div>
             <div class="sv-project-meta">
-              <span>◈ ${p.num_capas || 0} capas</span>
-              <span>▲ ${features} feat.</span>
+              <span>◈ ${p.num_capas||0} capas</span>
+              <span>▲ ${feats} feat.</span>
               <span>📅 ${date}</span>
             </div>
+            ${ok
+              ? `<a href="dashboard.html?proyecto=${p.id}" class="sv-card-map-btn">🗺️ Ver en mapa interactivo</a>`
+              : `<div class="sv-card-map-btn" style="opacity:0.35;cursor:not-allowed;">🗺️ Sin datos visualizables</div>`}
           </div>
-        </a>
-      `;
+        </div>`;
     }
 
     function renderPagination() {
       const el = document.getElementById('sv-pagination');
       if (state.pages <= 1) { el.innerHTML = ''; return; }
-
-      let html = `
-        <button class="sv-page-btn" id="pag-prev" ${state.page <= 1 ? 'disabled' : ''}>←</button>
-      `;
-
-      for (let i = 1; i <= state.pages; i++) {
-        if (i === 1 || i === state.pages || Math.abs(i - state.page) <= 2) {
-          html += `<button class="sv-page-btn ${i === state.page ? 'active' : ''}" data-page="${i}">${i}</button>`;
-        } else if (Math.abs(i - state.page) === 3) {
+      let html = `<button class="sv-page-btn" id="pag-prev" ${state.page<=1?'disabled':''}>←</button>`;
+      for (let i=1; i<=state.pages; i++) {
+        if (i===1||i===state.pages||Math.abs(i-state.page)<=2)
+          html += `<button class="sv-page-btn ${i===state.page?'active':''}" data-page="${i}">${i}</button>`;
+        else if (Math.abs(i-state.page)===3)
           html += `<span class="sv-page-btn" style="cursor:default;border:none;">…</span>`;
-        }
       }
-
-      html += `<button class="sv-page-btn" id="pag-next" ${state.page >= state.pages ? 'disabled' : ''}>→</button>`;
+      html += `<button class="sv-page-btn" id="pag-next" ${state.page>=state.pages?'disabled':''}>→</button>`;
       el.innerHTML = html;
 
       el.querySelectorAll('[data-page]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          state.page = parseInt(btn.dataset.page);
-          loadProyectos();
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        });
+        btn.addEventListener('click', () => { state.page=+btn.dataset.page; loadProyectos(); window.scrollTo({top:0,behavior:'smooth'}); });
       });
-
-      document.getElementById('pag-prev')?.addEventListener('click', () => {
-        if (state.page > 1) { state.page--; loadProyectos(); }
-      });
-
-      document.getElementById('pag-next')?.addEventListener('click', () => {
-        if (state.page < state.pages) { state.page++; loadProyectos(); }
-      });
+      document.getElementById('pag-prev')?.addEventListener('click', () => { if(state.page>1){state.page--;loadProyectos();} });
+      document.getElementById('pag-next')?.addEventListener('click', () => { if(state.page<state.pages){state.page++;loadProyectos();} });
     }
 
-    function escapeHtml(str) {
-      return String(str).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-    }
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-    // Event listeners de filtros
-    document.getElementById('sv-search-input').addEventListener('input', (e) => {
+    document.getElementById('sv-search-input').addEventListener('input', e => {
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => {
-        state.q = e.target.value.trim();
-        state.page = 1;
-        loadProyectos();
-      }, 400);
+      searchTimer = setTimeout(() => { state.q=e.target.value.trim(); state.page=1; loadProyectos(); }, 400);
     });
+    document.getElementById('sv-cat-filter').addEventListener('change', e => {
+      state.categoria=e.target.value; state.page=1;
+      document.querySelectorAll('.sv-cat-pill').forEach(b => b.classList.toggle('active', b.dataset.cat===state.categoria));
+      loadProyectos();
+    });
+    document.getElementById('sv-order-filter').addEventListener('change', e => { state.ordering=e.target.value; state.page=1; loadProyectos(); });
 
-    document.getElementById('sv-cat-filter').addEventListener('change', (e) => {
-      state.categoria = e.target.value;
-      state.page = 1;
-      // Sync pills
-      document.querySelectorAll('.sv-cat-pill').forEach(b => {
-        b.classList.toggle('active', b.dataset.cat === state.categoria);
+
+    // ── Sidenav: inicializar usuario y eventos ─────────────
+    (function() {
+      const user   = JSON.parse(localStorage.getItem('sivag_user') || '{}');
+      const nombre = user.nombre_completo || user.username || 'Usuario';
+      const rol    = user.rol === 'ADMIN' ? 'Administrador' : 'Investigador';
+      const avatar = nombre.charAt(0).toUpperCase();
+
+      const elNombre = document.getElementById('sv-nav-nombre');
+      const elRol    = document.getElementById('sv-nav-rol');
+      const elAvatar = document.getElementById('sv-nav-avatar');
+      if (elNombre) elNombre.textContent = nombre;
+      if (elRol)    elRol.textContent    = rol;
+      if (elAvatar) elAvatar.textContent = avatar;
+
+      const sidenav    = document.getElementById('sv-sidenav');
+      const collapseBtn= document.getElementById('sv-nav-collapse-btn');
+      const collapseIco= document.getElementById('sv-nav-collapse-icon');
+      let collapsed    = false;
+
+      collapseBtn?.addEventListener('click', () => {
+        collapsed = !collapsed;
+        sidenav.classList.toggle('collapsed', collapsed);
+        if (collapseIco) collapseIco.textContent = collapsed ? '▷' : '◁';
       });
-      loadProyectos();
-    });
 
-    document.getElementById('sv-order-filter').addEventListener('change', (e) => {
-      state.ordering = e.target.value;
-      state.page = 1;
-      loadProyectos();
-    });
+      document.getElementById('sv-nav-logout-btn')?.addEventListener('click', () => {
+        localStorage.removeItem('sivag_access');
+        localStorage.removeItem('sivag_refresh');
+        localStorage.removeItem('sivag_user');
+        window.location.href = 'login.html';
+      });
+    })();
 
-    // Inicializar
     loadCategories();
     loadProyectos();
   </script>

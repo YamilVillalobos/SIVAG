@@ -24,8 +24,8 @@
   --accent-red:    #ff4466;
 
   --text-primary:  #e8f4ff;
-  --text-secondary:#7ab3cc;
-  --text-muted:    #3d6a82;
+  --text-secondary:#b0cfe0;
+  --text-muted:    #6b9ab8;
   --text-label:    #00d4ff;
 
   --border-dim:    rgba(0, 212, 255, 0.12);
@@ -358,6 +358,7 @@ body {
 }
 
 .sv-label {
+  font-size: 11px;
   display: block;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -400,6 +401,7 @@ body {
 }
 
 .sv-field-error {
+  font-size: 11px;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.5px;
@@ -640,6 +642,7 @@ body {
 }
 
 .sv-eyebrow {
+  font-size: 11px;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 3px;
@@ -814,6 +817,7 @@ body {
 
 /* ── Tags / chips ─────────────────────────────────────────── */
 .sv-tag {
+  font-size: 11px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -973,6 +977,7 @@ body {
 }
 
 .sv-stat-label {
+  font-size: 11px;
   font-size: 11px;
   color: var(--text-muted);
   letter-spacing: 0.5px;

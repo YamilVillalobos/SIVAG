@@ -3,11 +3,11 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-sivag-dev-key-cambiar-en-produccion'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-sivag-dev-key-cambiar-en-produccion')
 
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -59,11 +59,11 @@ WSGI_APPLICATION = 'sivag_backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.contrib.gis.db.backends.postgis',
-        'NAME': 'SIVAG_db',
-        'USER': 'postgres',
-        'PASSWORD': 'GreenHat_MY77',
+        'NAME': os.environ.get('DB_NAME', 'SIVAG_db'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD'),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': '5432',
+        'PORT': os.environ.get('DB_PORT', '5432'),
         'OPTIONS': {
             'connect_timeout': 10,
         },
@@ -170,13 +170,10 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://127.0.0.1:5500')
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # Orígenes permitidos en DESARROLLO (Live Server de VS Code).
 # PRODUCCIÓN: reemplazar con el dominio real → "https://sivag.ccgs.mx"
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5501",
-    "http://127.0.0.1:5501",
-    # Agregar aquí si usas otro puerto o herramienta en desarrollo:
-    # "http://localhost:3000",
-    # "http://localhost:8080",
-]
+CORS_ALLOWED_ORIGINS = os.environ.get(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:5501,http://127.0.0.1:5501'
+).split(',')
 
 # Permite enviar el header Authorization con el JWT desde el frontend.
 CORS_ALLOW_CREDENTIALS = True

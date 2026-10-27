@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Subir Capa — SIVAG</title>
+  <link rel="stylesheet" href="css/sivag.css" />
+  <style>
+    /* ── Layout principal ───────────────────────────────── */
+    .sv-upload-page {
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    .sv-upload-header {
+      padding: 32px 0 24px;
+      border-bottom: 1px solid var(--border-dim);
+      margin-bottom: 32px;
+    }
+
+    .sv-upload-grid {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 28px;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .sv-upload-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Drop Zone ──────────────────────────────────────── */
+    .sv-dropzone {
+      border: 2px dashed var(--border-dim);
+      border-radius: var(--radius-xl);
+      background: var(--bg-card);
+      padding: 48px 32px;
+      text-align: center;
+      transition: var(--transition);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      min-height: 240px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .sv-dropzone::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 50%, rgba(0,212,255,0.04) 0%, transparent 70%);
+      opacity: 0;
+      transition: var(--transition);
+    }
+
+    .sv-dropzone:hover,
+    .sv-dropzone.dragover {
+      border-color: var(--accent-cyan);
+      background: rgba(0, 212, 255, 0.04);
+      box-shadow: 0 0 40px rgba(0, 212, 255, 0.12);
+    }
+
+    .sv-dropzone:hover::before,
+    .sv-dropzone.dragover::before {
+      opacity: 1;
+    }
+
+    .sv-dropzone.dragover {
+      border-color: var(--accent-teal);
+      background: rgba(0, 184, 160, 0.06);
+      transform: scale(1.01);
+    }
+
+    .sv-dropzone.has-file {
+      border-color: var(--accent-teal);
+      border-style: solid;
+      background: rgba(0, 184, 160, 0.06);
+    }
+
+    .sv-dropzone-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--bg-glass);
+      border: 1px solid var(--border-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin-bottom: 8px;
+      transition: var(--transition);
+      position: relative;
+    }
+
+    .sv-dropzone:hover .sv-dropzone-icon,
+    .sv-dropzone.dragover .sv-dropzone-icon {
+      border-color: var(--border-glow);
+      box-shadow: var(--shadow-glow);
+      transform: translateY(-4px);
+    }
+
+    .sv-dropzone-icon-pulse {
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      border: 1px solid var(--accent-cyan);
+      opacity: 0;
+      animation: pulse-ring 2.5s ease-out infinite;
+    }
+
+    @keyframes pulse-ring {
+      0%   { transform: scale(0.8); opacity: 0.6; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+
+    .sv-dropzone-title {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .sv-dropzone-sub {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    .sv-format-badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 4px;
+    }
+
+    .sv-format-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 1px;
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid;
+      text-transform: uppercase;
+    }
+
+    .sv-format-badge-shape  { color: #00d4ff; border-color: rgba(0,212,255,0.3); background: rgba(0,212,255,0.08); }
+    .sv-format-badge-raster { color: #00e5aa; border-color: rgba(0,229,170,0.3); background: rgba(0,229,170,0.08); }
+    .sv-format-badge-excel  { color: #ffb700; border-color: rgba(255,183,0,0.3);  background: rgba(255,183,0,0.08);  }
+
+    /* ── File preview card ──────────────────────────────── */
+    .sv-file-preview {
+      display: none;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-lg);
+      margin-top: 20px;
+    }
+
+    .sv-file-preview.visible { display: flex; }
+
+    .sv-file-icon {
+      width: 48px; height: 48px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .sv-file-icon-shape  { background: rgba(0,212,255,0.12); }
+    .sv-file-icon-raster { background: rgba(0,229,170,0.12); }
+    .sv-file-icon-excel  { background: rgba(255,183,0,0.12); }
+
+    .sv-file-info { flex: 1; min-width: 0; }
+
+    .sv-file-name {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sv-file-meta {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .sv-file-remove {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 18px;
+      padding: 4px;
+      border-radius: var(--radius-sm);
+      transition: var(--transition);
+      flex-shrink: 0;
+    }
+
+    .sv-file-remove:hover { color: var(--accent-red); }
+
+    /* ── Progress bar ───────────────────────────────────── */
+    .sv-progress-wrap {
+      display: none;
+      margin-top: 20px;
+    }
+
+    .sv-progress-wrap.visible { display: block; }
+
+    .sv-progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .sv-progress-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      letter-spacing: 0.5px;
+    }
+
+    .sv-progress-pct {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+
+    .sv-progress-bar-track {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-input);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .sv-progress-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-teal));
+      width: 0%;
+      transition: width 0.3s ease;
+      position: relative;
+    }
+
+    .sv-progress-bar-fill::after {
+      content: '';
+      position: absolute;
+      right: 0; top: 0; bottom: 0;
+      width: 40px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3));
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+
+    @keyframes shimmer {
+      0%   { opacity: 0; }
+      50%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    .sv-progress-phase {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      letter-spacing: 0.5px;
+    }
+
+    /* ETL status phases */
+    .sv-etl-phases {
+      display: none;
+      margin-top: 16px;
+      gap: 8px;
+    }
+
+    .sv-etl-phases.visible { display: flex; }
+
+    .sv-etl-phase {
+      flex: 1;
+      padding: 10px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-md);
+      text-align: center;
+    }
+
+    .sv-etl-phase-icon { font-size: 16px; display: block; margin-bottom: 4px; }
+    .sv-etl-phase-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .sv-etl-phase.done  { border-color: rgba(0,229,170,0.4); background: rgba(0,229,170,0.06); }
+    .sv-etl-phase.active{ border-color: rgba(0,212,255,0.4); background: rgba(0,212,255,0.06); animation: phase-pulse 1.5s ease-in-out infinite; }
+    .sv-etl-phase.error { border-color: rgba(255,68,102,0.4); background: rgba(255,68,102,0.06); }
+
+    @keyframes phase-pulse {
+      0%,100% { box-shadow: none; }
+      50%      { box-shadow: 0 0 12px rgba(0,212,255,0.3); }
+    }
+
+    /* ── Right panel: form ──────────────────────────────── */
+    .sv-upload-form-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-xl);
+      padding: 28px;
+    }
+
+    .sv-upload-form-card h3 {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0 0 6px;
+    }
+
+    .sv-upload-form-card .sv-section-sub {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+
+    /* Validation hints */
+    .sv-validation-hints {
+      margin-top: 16px;
+      padding: 14px 16px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-md);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.8;
+      letter-spacing: 0.3px;
+    }
+
+    .sv-validation-hints strong {
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 4px;
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    /* Result card */
+    .sv-result-card {
+      display: none;
+      margin-top: 20px;
+      padding: 20px;
+      border-radius: var(--radius-lg);
+      border: 1px solid;
+    }
+
+    .sv-result-card.success {
+      display: block;
+      border-color: rgba(0,229,170,0.4);
+      background: rgba(0,229,170,0.06);
+    }
+
+    .sv-result-card.error {
+      display: block;
+      border-color: rgba(255,68,102,0.4);
+      background: rgba(255,68,102,0.06);
+    }
+
+    .sv-result-title {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .sv-result-card.success .sv-result-title { color: var(--accent-green); }
+    .sv-result-card.error   .sv-result-title { color: var(--accent-red); }
+
+    .sv-result-meta {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.8;
+    }
+
+    .sv-result-meta span {
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+
+    .sv-result-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    /* Error field list */
+    .sv-error-list {
+      margin-top: 8px;
+      padding: 10px 14px;
+      background: rgba(0,0,0,0.3);
+      border-radius: var(--radius-md);
+    }
+
+    .sv-error-item {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--accent-red);
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255,68,102,0.1);
+    }
+
+    .sv-error-item:last-child { border-bottom: none; }
+    .sv-error-item strong { color: rgba(255,68,102,0.9); }
+
+    /* Drag animation overlay */
+    .sv-drag-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 212, 255, 0.05);
+      border: 3px dashed var(--accent-cyan);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .sv-drag-overlay.visible {
+      display: flex;
+    }
+
+    .sv-drag-overlay-text {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      text-shadow: 0 0 40px rgba(0,212,255,0.6);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    /* Geometry type select with icons */
+    .sv-geom-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .sv-geom-option {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 8px;
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: var(--transition);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    .sv-geom-option:hover {
+      border-color: var(--border-glow);
+      color: var(--text-secondary);
+    }
+
+    .sv-geom-option.selected {
+      border-color: var(--accent-cyan);
+      background: rgba(0,212,255,0.08);
+      color: var(--accent-cyan);
+    }
+
+    .sv-geom-option .icon { font-size: 18px; }
+
+    /* Hidden file input */
+    #sv-file-input { display: none; }
+
+    /* ── Tabla de estructura de columnas CSV/Excel ───── */
+    .sv-col-schema { margin-top:14px; border:1px solid var(--border-dim); border-radius:var(--radius-lg); overflow:hidden; }
+    .sv-col-schema-header { display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--bg-glass); border-bottom:1px solid var(--border-dim); font-family:var(--font-mono); font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted); }
+    .sv-col-schema-table { width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:10px; }
+    .sv-col-schema-table th { padding:6px 14px; text-align:left; color:var(--text-muted); font-size:9px; letter-spacing:1px; text-transform:uppercase; border-bottom:1px solid var(--border-dim); background:var(--bg-input); }
+    .sv-col-schema-table td { padding:7px 14px; border-bottom:1px solid rgba(255,255,255,0.03); color:var(--text-secondary); }
+    .sv-col-schema-table tr:last-child td { border-bottom:none; }
+    .sv-col-schema-table tr.req td:first-child { color:var(--accent-cyan); font-weight:700; }
+    .sv-col-schema-badge { display:inline-block; padding:1px 7px; border-radius:var(--radius-sm); font-size:8px; letter-spacing:0.5px; text-transform:uppercase; }
+    .sv-col-badge-req  { background:rgba(0,212,255,0.12);   color:var(--accent-cyan); border:1px solid rgba(0,212,255,0.25); }
+    .sv-col-badge-opt  { background:rgba(61,106,130,0.2);   color:var(--text-muted);  border:1px solid var(--border-dim); }
+    .sv-col-badge-num  { background:rgba(0,229,170,0.1);    color:var(--accent-teal); border:1px solid rgba(0,229,170,0.2); }
+    .sv-col-badge-text { background:rgba(199,146,234,0.1);  color:#c792ea;            border:1px solid rgba(199,146,234,0.2); }
+    .sv-col-badge-date { background:rgba(255,183,0,0.1);    color:#ffb700;            border:1px solid rgba(255,183,0,0.2); }
+    .sv-col-schema-note { padding:8px 14px; background:rgba(0,212,255,0.04); border-top:1px solid var(--border-dim); font-family:var(--font-mono); font-size:9px; color:var(--text-muted); line-height:1.7; letter-spacing:0.3px; }
+  </style>
+</head>
+<body>
+  <!-- Background -->
+  <div class="sv-bg-grid"></div>
+  <div class="sv-bg-orb sv-bg-orb-1"></div>
+  <div class="sv-bg-orb sv-bg-orb-2"></div>
+
+  <!-- Drag overlay global -->
+  <div class="sv-drag-overlay" id="sv-drag-overlay">
+    <div class="sv-drag-overlay-text">⬇ Soltar archivo aquí</div>
+  </div>
+
+  <!-- Navbar -->
+  <nav class="sv-navbar" id="sv-main-navbar">
+    <a href="index.html" class="sv-navbar-logo">
+      <span class="sv-logo-mark">◈</span>
+      <span class="sv-logo-text">SIVAG</span>
+    </a>
+    <ul class="sv-navbar-nav" id="sv-navbar-nav"></ul>
+    <div id="sv-user-badge-wrap"></div>
+    <button class="sv-navbar-toggler" id="sv-navbar-toggler">☰</button>
+  </nav>
+
+  <div class="sv-upload-page">
+    <div class="sv-container" style="max-width:1200px;margin:0 auto;padding:0 24px;">
+
+      <!-- Header -->
+      <div class="sv-upload-header">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+          <a href="panel.html" class="sv-btn sv-btn-ghost sv-btn-sm">← Mi Panel</a>
+          <div style="width:1px;height:20px;background:var(--border-dim);"></div>
+          <span class="sv-tag sv-tag-cyan">Ingesta de Capa</span>
+        </div>
+        <h1 style="font-family:var(--font-display);font-size:26px;font-weight:900;margin:12px 0 6px;">
+          Subir Capa Geoespacial
+        </h1>
+        <p style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:0.5px;">
+          Arrastra o selecciona un archivo Shape (.zip), GeoTIFF (.tif) o Excel/CSV con coordenadas
+        </p>
+      </div>
+
+      <div id="sv-page-alert" style="margin-bottom:16px;"></div>
+
+      <!-- Main grid -->
+      <div class="sv-upload-grid">
+
+        <!-- LEFT: Drop zone + progress -->
+        <div>
+          <!-- Drop zone -->
+          <div class="sv-dropzone" id="sv-dropzone">
+            <div class="sv-dropzone-icon">
+              <div class="sv-dropzone-icon-pulse"></div>
+              <span id="sv-dropzone-icon-emoji">📂</span>
+            </div>
+            <div class="sv-dropzone-title" id="sv-dropzone-title">
+              Arrastra tu archivo aquí
+            </div>
+            <div class="sv-dropzone-sub">o haz clic para seleccionar</div>
+            <div class="sv-format-badges">
+              <span class="sv-format-badge sv-format-badge-shape">.zip Shapefile</span>
+              <span class="sv-format-badge sv-format-badge-raster">.tif GeoTIFF</span>
+              <span class="sv-format-badge sv-format-badge-excel">.xlsx Excel</span>
+              <span class="sv-format-badge sv-format-badge-excel">.csv CSV</span>
+            </div>
+            <div style="margin-top:8px;font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">
+              Tamaño máximo: 100 MB
+            </div>
+            <input type="file" id="sv-file-input"
+              accept=".zip,.tif,.tiff,.xlsx,.csv" />
+          </div>
+
+          <!-- File preview -->
+          <div class="sv-file-preview" id="sv-file-preview">
+            <div class="sv-file-icon" id="sv-file-icon">📄</div>
+            <div class="sv-file-info">
+              <div class="sv-file-name" id="sv-file-name">archivo.zip</div>
+              <div class="sv-file-meta" id="sv-file-meta">0 KB · Shape ZIP</div>
+            </div>
+            <button class="sv-file-remove" id="sv-file-remove" title="Quitar archivo">✕</button>
+          </div>
+
+          <!-- Progress bar -->
+          <div class="sv-progress-wrap" id="sv-progress-wrap">
+            <div class="sv-progress-header">
+              <span class="sv-progress-label" id="sv-progress-label">Subiendo archivo...</span>
+              <span class="sv-progress-pct" id="sv-progress-pct">0%</span>
+            </div>
+            <div class="sv-progress-bar-track">
+              <div class="sv-progress-bar-fill" id="sv-progress-fill"></div>
+            </div>
+            <div class="sv-progress-phase" id="sv-progress-phase">Preparando transferencia...</div>
+          </div>
+
+          <!-- ETL Phases -->
+          <div class="sv-etl-phases" id="sv-etl-phases">
+            <div class="sv-etl-phase" id="phase-upload">
+              <span class="sv-etl-phase-icon">📤</span>
+              <span class="sv-etl-phase-label">Subida</span>
+            </div>
+            <div class="sv-etl-phase" id="phase-validate">
+              <span class="sv-etl-phase-icon">🔍</span>
+              <span class="sv-etl-phase-label">Validación</span>
+            </div>
+            <div class="sv-etl-phase" id="phase-transform">
+              <span class="sv-etl-phase-icon">⚙️</span>
+              <span class="sv-etl-phase-label">Transformación</span>
+            </div>
+            <div class="sv-etl-phase" id="phase-index">
+              <span class="sv-etl-phase-icon">🗂️</span>
+              <span class="sv-etl-phase-label">Indexación</span>
+            </div>
+          </div>
+
+          <!-- Result card -->
+          <div class="sv-result-card" id="sv-result-card">
+            <div class="sv-result-title" id="sv-result-title">✓ Capa procesada exitosamente</div>
+            <div class="sv-result-meta" id="sv-result-meta"></div>
+            <div class="sv-result-actions" id="sv-result-actions"></div>
+          </div>
+
+          <!-- Validation hints -->
+          <div class="sv-validation-hints" id="sv-validation-hints">
+            <strong>Requisitos del formato</strong>
+            Selecciona un archivo para ver los requisitos específicos de su formato.
+          </div>
+        </div>
+
+        <!-- RIGHT: Metadata form -->
+        <div>
+          <div class="sv-upload-form-card">
+            <h3>Metadatos de la capa</h3>
+            <p class="sv-section-sub">Completa la información antes de subir</p>
+
+            <form id="sv-upload-form" novalidate>
+
+              <!-- Proyecto destino — leído de ?proyecto= en la URL -->
+              <input type="hidden" id="capa-proyecto" name="proyecto" value="" />
+              <div class="sv-form-group">
+                <label class="sv-label">
+                  <span class="sv-label-icon">◈</span> Proyecto destino
+                </label>
+                <div id="sv-proyecto-info"
+                  style="display:flex;align-items:center;gap:10px;padding:10px 14px;
+                         background:var(--bg-input);border:1px solid var(--border-dim);
+                         border-radius:var(--radius-md);">
+                  <span style="font-size:18px;" id="sv-proyecto-cat-icon">◈</span>
+                  <div style="flex:1;min-width:0;">
+                    <div id="sv-proyecto-nombre"
+                      style="font-family:var(--font-display);font-size:13px;font-weight:600;
+                             color:var(--text-primary);white-space:nowrap;overflow:hidden;
+                             text-overflow:ellipsis;">Cargando...</div>
+                    <div id="sv-proyecto-meta"
+                      style="font-family:var(--font-mono);font-size:9px;
+                             color:var(--text-muted);margin-top:2px;letter-spacing:0.5px;">&nbsp;</div>
+                  </div>
+                  <a href="panel.html"
+                    style="font-family:var(--font-mono);font-size:9px;color:var(--accent-cyan);
+                           text-decoration:none;letter-spacing:0.5px;flex-shrink:0;"
+                    title="Volver al panel para cambiar proyecto">cambiar →</a>
+                </div>
+                <div class="sv-field-error" id="error-proyecto"></div>
+              </div>
+
+              <!-- Nombre de la capa -->
+              <div class="sv-form-group">
+                <label class="sv-label" for="capa-nombre">
+                  <span class="sv-label-icon">▸</span> Nombre de la capa *
+                </label>
+                <input
+                  type="text"
+                  id="capa-nombre"
+                  name="nombre"
+                  class="sv-input"
+                  placeholder="Ej: Puntos de muestreo 2024"
+                  required
+                  maxlength="120"
+                />
+                <div class="sv-field-error" id="error-nombre"></div>
+              </div>
+
+              <!-- Descripción -->
+              <div class="sv-form-group">
+                <label class="sv-label" for="capa-descripcion">
+                  <span class="sv-label-icon">▸</span> Descripción
+                </label>
+                <textarea
+                  id="capa-descripcion"
+                  name="descripcion"
+                  class="sv-input sv-textarea"
+                  placeholder="Describe el contenido y fuente de los datos..."
+                  rows="3"
+                  maxlength="500"
+                ></textarea>
+                <div class="sv-field-error" id="error-descripcion"></div>
+              </div>
+
+              <!-- Tipo de archivo (auto-detectado) -->
+              <div class="sv-form-group">
+                <label class="sv-label">
+                  <span class="sv-label-icon">▸</span> Tipo de archivo
+                </label>
+                <div style="display:flex;gap:8px;align-items:center;padding:10px 12px;background:var(--bg-input);border:1px solid var(--border-dim);border-radius:var(--radius-md);">
+                  <span id="sv-tipo-icon" style="font-size:16px;">📄</span>
+                  <span id="sv-tipo-label" style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">
+                    Se detectará automáticamente al seleccionar el archivo
+                  </span>
+                </div>
+              </div>
+
+              <!-- Geometría esperada (solo visible para shapes) -->
+              <div class="sv-form-group" id="sv-geom-group" style="display:none;">
+                <label class="sv-label">
+                  <span class="sv-label-icon">▸</span> Tipo de geometría esperada
+                </label>
+                <div class="sv-geom-grid" id="sv-geom-grid">
+                  <div class="sv-geom-option selected" data-value="POINT">
+                    <span class="icon">⬤</span>
+                    <span>Punto</span>
+                  </div>
+                  <div class="sv-geom-option" data-value="LINE">
+                    <span class="icon">╱</span>
+                    <span>Línea</span>
+                  </div>
+                  <div class="sv-geom-option" data-value="POLYGON">
+                    <span class="icon">⬡</span>
+                    <span>Polígono</span>
+                  </div>
+                </div>
+                <input type="hidden" id="capa-geometria" name="tipo_geometria" value="POINT" />
+              </div>
+
+              <div id="sv-form-alert" style="margin-top:12px;"></div>
+
+              <button
+                type="submit"
+                class="sv-btn sv-btn-primary sv-btn-block"
+                id="sv-submit-btn"
+                style="margin-top:20px;"
+                disabled
+              >
+                ◈ Subir y procesar capa
+              </button>
+
+              <p style="text-align:center;font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-top:12px;letter-spacing:0.5px;">
+                El pipeline ETL validará, transformará e indexará automáticamente tu archivo
+              </p>
+            </form>
+          </div>
+
+          <!-- Info card -->
+          <div class="sv-upload-form-card" style="margin-top:16px;padding:20px;">
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px;">
+              ℹ Pipeline ETL
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div style="display:flex;gap:10px;align-items:flex-start;">
+                <span style="color:var(--accent-cyan);font-size:14px;flex-shrink:0;">01</span>
+                <div>
+                  <div style="font-family:var(--font-display);font-size:12px;font-weight:600;color:var(--text-primary);">Validación de formato</div>
+                  <div style="font-size:11px;color:var(--text-muted);">Verificación de estructura, proyección y CRS</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;align-items:flex-start;">
+                <span style="color:var(--accent-teal);font-size:14px;flex-shrink:0;">02</span>
+                <div>
+                  <div style="font-family:var(--font-display);font-size:12px;font-weight:600;color:var(--text-primary);">Conversión a GeoJSON</div>
+                  <div style="font-size:11px;color:var(--text-muted);">Reproyección a WGS-84, normalización de atributos</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;align-items:flex-start;">
+                <span style="color:var(--accent-green);font-size:14px;flex-shrink:0;">03</span>
+                <div>
+                  <div style="font-family:var(--font-display);font-size:12px;font-weight:600;color:var(--text-primary);">Indexación en PostGIS</div>
+                  <div style="font-size:11px;color:var(--text-muted);">Almacenamiento espacial y cálculo de bbox</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="sv-footer">
+    <p class="sv-footer-text">© 2025 SIVAG · CCGS · Sistema de Inteligencia y Visualización de Activos Geoespaciales</p>
+  </footer>
+
+  <script type="module">
+    import { renderNavbar, showAlert, clearAlert, showFieldErrors, clearFieldErrors, setButtonLoading } from './js/ui.js';
+    import { Router } from './js/router.js';
+    import { API, TokenStore } from './js/api.js';
+
+    // Proteger ruta — solo INVESTIGADOR o ADMIN
+    if (!Router.requireRole(['INVESTIGADOR', 'ADMIN'])) throw new Error('Unauthorized');
+    renderNavbar();
+
+    // ── Estado global ──────────────────────────────────────
+    let selectedFile   = null;
+    let detectedType   = null;  // 'SHAPE' | 'GEOTIFF' | 'EXCEL' | 'CSV'
+    let uploadedCapaId = null;
+
+    const MAX_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
+
+    // ── Elementos DOM ──────────────────────────────────────
+    const dropzone      = document.getElementById('sv-dropzone');
+    const fileInput     = document.getElementById('sv-file-input');
+    const filePreview   = document.getElementById('sv-file-preview');
+    const progressWrap  = document.getElementById('sv-progress-wrap');
+    const etlPhases     = document.getElementById('sv-etl-phases');
+    const resultCard    = document.getElementById('sv-result-card');
+    const submitBtn     = document.getElementById('sv-submit-btn');
+    const dragOverlay   = document.getElementById('sv-drag-overlay');
+    const geomGroup     = document.getElementById('sv-geom-group');
+    const uploadForm    = document.getElementById('sv-upload-form');
+
+    // ── Resolver proyecto desde URL y mostrar info ────────
+    const CAT_ICONS = { CLIMA:'🌤', FAUNA:'🦎', AGUA:'💧', SUELO:'🌍', VEGETACION:'🌿', ATMOSFERA:'🌬', OTRO:'◈' };
+
+    async function initProyecto() {
+      const urlParams  = new URLSearchParams(window.location.search);
+      const proyectoId = urlParams.get('proyecto');
+
+      if (!proyectoId) {
+        document.getElementById('sv-proyecto-nombre').textContent  = 'Sin proyecto seleccionado';
+        document.getElementById('sv-proyecto-meta').textContent    = 'Vuelve al panel y usa el botón "↑ Capa"';
+        document.getElementById('sv-proyecto-cat-icon').textContent = '⚠';
+        showAlert('sv-form-alert',
+          'No se especificó ningún proyecto. Vuelve al panel y haz clic en "↑ Capa" desde el proyecto al que quieras subir la capa.',
+          'warning');
+        submitBtn.disabled = true;
+        return;
+      }
+
+      document.getElementById('capa-proyecto').value = proyectoId;
+
+      try {
+        const p = await API.get(`/api/proyectos/${proyectoId}/`);
+        const icon = CAT_ICONS[p.categoria] || '◈';
+        document.getElementById('sv-proyecto-cat-icon').textContent = icon;
+        document.getElementById('sv-proyecto-nombre').textContent   = p.titulo;
+        document.getElementById('sv-proyecto-meta').textContent     =
+          `${p.categoria || 'OTRO'} · ${p.num_capas || 0} capas · ${(p.total_features||0).toLocaleString()} features`;
+      } catch (err) {
+        document.getElementById('sv-proyecto-nombre').textContent = 'No se pudo cargar el proyecto';
+        document.getElementById('sv-proyecto-meta').textContent   = proyectoId;
+        showAlert('sv-form-alert', 'No se pudo cargar la información del proyecto.', 'error');
+      }
+
+      updateSubmitState();
+    }
+
+    initProyecto();
+
+    // ── Detección de tipo por extensión ────────────────────
+    function detectFileType(filename) {
+      const ext = filename.split('.').pop().toLowerCase();
+      if (ext === 'zip')            return 'SHAPE';
+      if (ext === 'tif' || ext === 'tiff') return 'GEOTIFF';
+      if (ext === 'xlsx')           return 'EXCEL';
+      if (ext === 'csv')            return 'CSV';
+      return null;
+    }
+
+    function getFileTypeInfo(type) {
+      const map = {
+        SHAPE:   { label: 'Shapefile (ZIP)',  icon: '🗺️',  color: 'cyan',   class: 'sv-file-icon-shape'  },
+        GEOTIFF: { label: 'GeoTIFF Raster',   icon: '🛰️',  color: 'green',  class: 'sv-file-icon-raster' },
+        EXCEL:   { label: 'Excel (.xlsx)',     icon: '📊',  color: 'amber',  class: 'sv-file-icon-excel'  },
+        CSV:     { label: 'CSV con coordenadas', icon: '📋', color: 'amber', class: 'sv-file-icon-excel'  },
+      };
+      return map[type] || { label: 'Desconocido', icon: '📄', color: 'dim', class: '' };
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024)       return `${bytes} B`;
+      if (bytes < 1024*1024)  return `${(bytes/1024).toFixed(1)} KB`;
+      return `${(bytes/(1024*1024)).toFixed(2)} MB`;
+    }
+
+    // ── Validación frontend ────────────────────────────────
+    function validateFile(file) {
+      const errors = [];
+      const type = detectFileType(file.name);
+
+      if (!type) {
+        errors.push('Formato no soportado. Usa .zip, .tif/.tiff, .xlsx o .csv');
+        return { valid: false, errors, type: null };
+      }
+      if (file.size > MAX_SIZE_BYTES) {
+        errors.push(`El archivo supera el límite de 100 MB (${formatBytes(file.size)})`);
+        return { valid: false, errors, type };
+      }
+      if (file.size === 0) {
+        errors.push('El archivo está vacío');
+        return { valid: false, errors, type };
+      }
+      return { valid: true, errors: [], type };
+    }
+
+    function buildColSchemaHTML(tipo) {
+      if (tipo === 'CSV') {
+        return `<div class="sv-col-schema">
+          <div class="sv-col-schema-header">📋 Estructura requerida del CSV</div>
+          <table class="sv-col-schema-table">
+            <thead><tr><th>Columna</th><th>Tipo</th><th>Estado</th><th>Ejemplo</th></tr></thead>
+            <tbody>
+              <tr class="req"><td>Latitud</td><td><span class="sv-col-schema-badge sv-col-badge-num">número</span></td><td><span class="sv-col-schema-badge sv-col-badge-req">obligatoria</span></td><td style="color:var(--text-muted);">17.8825</td></tr>
+              <tr class="req"><td>Longitud</td><td><span class="sv-col-schema-badge sv-col-badge-num">número</span></td><td><span class="sv-col-schema-badge sv-col-badge-req">obligatoria</span></td><td style="color:var(--text-muted);">-92.9267</td></tr>
+              <tr><td>temperatura</td><td><span class="sv-col-schema-badge sv-col-badge-num">número</span></td><td><span class="sv-col-schema-badge sv-col-badge-opt">opcional</span></td><td style="color:var(--text-muted);">42.5</td></tr>
+              <tr><td>zona</td><td><span class="sv-col-schema-badge sv-col-badge-text">texto</span></td><td><span class="sv-col-schema-badge sv-col-badge-opt">opcional</span></td><td style="color:var(--text-muted);">norte</td></tr>
+              <tr><td>fecha</td><td><span class="sv-col-schema-badge sv-col-badge-date">fecha</span></td><td><span class="sv-col-schema-badge sv-col-badge-opt">opcional</span></td><td style="color:var(--text-muted);">2024-03-15</td></tr>
+            </tbody>
+          </table>
+          <div class="sv-col-schema-note">
+            ⚠ <strong style="color:var(--accent-cyan);">Latitud</strong> y
+            <strong style="color:var(--accent-cyan);">Longitud</strong> son obligatorias (sin importar mayúsculas).<br>
+            Los valores deben ser <strong style="color:#ffb700;">solo números decimales</strong>:
+            punto (.) como separador decimal, signo - para negativos.
+            <strong style="color:#ff6b6b;">No se aceptan</strong> letras, el símbolo °, comillas ni otros caracteres.<br>
+            ✓ Correcto: <span style="color:#00e5aa;font-family:monospace;">17.9878</span> &nbsp;
+            ✗ Incorrecto: <span style="color:#ff6b6b;font-family:monospace;">17°59'N</span> o <span style="color:#ff6b6b;font-family:monospace;">17,9878</span><br>
+            Separador de columnas: coma (,) o punto y coma (;) — se detecta automáticamente.
+          </div>
+        </div>`;
+      }
+      if (tipo === 'EXCEL') {
+        return `<div class="sv-col-schema">
+          <div class="sv-col-schema-header">📊 Estructura requerida del Excel</div>
+          <table class="sv-col-schema-table">
+            <thead><tr><th>Nombres aceptados</th><th>Tipo</th><th>Estado</th></tr></thead>
+            <tbody>
+              <tr class="req"><td>lat · latitude · latitud · y · lat_grado</td><td><span class="sv-col-schema-badge sv-col-badge-num">número</span></td><td><span class="sv-col-schema-badge sv-col-badge-req">1 obligatoria</span></td></tr>
+              <tr class="req"><td>lon · lng · longitude · longitud · x · lon_grado</td><td><span class="sv-col-schema-badge sv-col-badge-num">número</span></td><td><span class="sv-col-schema-badge sv-col-badge-req">1 obligatoria</span></td></tr>
+              <tr><td>cualquier nombre adicional</td><td><span class="sv-col-schema-badge sv-col-badge-num">número</span> <span class="sv-col-schema-badge sv-col-badge-text">texto</span> <span class="sv-col-schema-badge sv-col-badge-date">fecha</span></td><td><span class="sv-col-schema-badge sv-col-badge-opt">opcionales</span></td></tr>
+            </tbody>
+          </table>
+          <div class="sv-col-schema-note">
+            Excel acepta múltiples variantes de nombres para lat/lon. Primera fila como encabezados.
+            Las columnas adicionales se clasifican automáticamente para graficación.
+          </div>
+        </div>`;
+      }
+      return '';
+    }
+
+    const HINTS = {
+      SHAPE: `<strong>Shapefile (.zip)</strong>
+        · El ZIP debe contener al menos: .shp, .dbf, .shx<br>
+        · Archivos opcionales: .prj (proyección), .cpg (codificación)<br>
+        · Sin el .prj se asumirá WGS-84 (EPSG:4326)<br>
+        · Máximo 100 MB comprimido`,
+      GEOTIFF: `<strong>GeoTIFF (.tif / .tiff)</strong>
+        · Debe tener información de georreferenciación embebida<br>
+        · Soporta: single-band, multi-band, RGB, Float32<br>
+        · Se preserva íntegro — sin conversión a GeoJSON<br>
+        · Máximo 100 MB`,
+      EXCEL: `<strong>Excel (.xlsx)</strong>
+        · Primera fila como encabezados<br>
+        · Debe tener columna de latitud y columna de longitud (ver estructura)<br>
+        · Máximo 100 MB`,
+      CSV: `<strong>CSV con coordenadas</strong>
+        · Columnas <strong style="color:var(--accent-cyan)">Latitud</strong> y
+          <strong style="color:var(--accent-cyan)">Longitud</strong> obligatorias<br>
+        · Separador coma o punto y coma — se detecta solo<br>
+        · Máximo 100 MB`,
+    };
+
+    function updateHints(type) {
+      const el = document.getElementById('sv-validation-hints');
+      const hint = HINTS[type] || '<strong>Requisitos del formato</strong>Selecciona un archivo para ver los requisitos.';
+      el.innerHTML = hint + buildColSchemaHTML(type);
+    }
+
+    // ── Procesar archivo seleccionado ──────────────────────
+    function processFile(file) {
+      clearAlert('sv-page-alert');
+      resultCard.className = 'sv-result-card';
+
+      const { valid, errors, type } = validateFile(file);
+
+      if (!valid) {
+        showAlert('sv-page-alert', errors.join('. '), 'error');
+        return;
+      }
+
+      selectedFile  = file;
+      detectedType  = type;
+      const info    = getFileTypeInfo(type);
+
+      // Update dropzone
+      dropzone.classList.add('has-file');
+      document.getElementById('sv-dropzone-icon-emoji').textContent = info.icon;
+      document.getElementById('sv-dropzone-title').textContent = file.name;
+
+      // File preview
+      const fileIcon = document.getElementById('sv-file-icon');
+      fileIcon.textContent  = info.icon;
+      fileIcon.className    = `sv-file-icon ${info.class}`;
+      document.getElementById('sv-file-name').textContent = file.name;
+      document.getElementById('sv-file-meta').textContent =
+        `${formatBytes(file.size)} · ${info.label}`;
+      filePreview.classList.add('visible');
+
+      // Tipo auto-detect
+      document.getElementById('sv-tipo-icon').textContent  = info.icon;
+      document.getElementById('sv-tipo-label').textContent = info.label;
+      document.getElementById('sv-tipo-label').style.color = 'var(--text-primary)';
+
+      // Geometría solo para shapes
+      geomGroup.style.display = type === 'SHAPE' ? 'block' : 'none';
+
+      // Hints
+      updateHints(type);
+
+      // Enable submit si hay proyecto seleccionado
+      updateSubmitState();
+    }
+
+    // ── Drag & Drop handlers ───────────────────────────────
+    let dragCounter = 0;
+
+    document.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragCounter++;
+      dragOverlay.classList.add('visible');
+    });
+
+    document.addEventListener('dragleave', () => {
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        dragOverlay.classList.remove('visible');
+      }
+    });
+
+    document.addEventListener('dragover', e => e.preventDefault());
+
+    document.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      dragOverlay.classList.remove('visible');
+      const file = e.dataTransfer?.files[0];
+      if (file) processFile(file);
+    });
+
+    dropzone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      dragCounter = 0;
+      dragOverlay.classList.remove('visible');
+      const file = e.dataTransfer?.files[0];
+      if (file) processFile(file);
+    });
+
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) processFile(file);
+    });
+
+    // ── Quitar archivo ─────────────────────────────────────
+    document.getElementById('sv-file-remove').addEventListener('click', () => {
+      selectedFile  = null;
+      detectedType  = null;
+      dropzone.classList.remove('has-file');
+      document.getElementById('sv-dropzone-icon-emoji').textContent = '📂';
+      document.getElementById('sv-dropzone-title').textContent = 'Arrastra tu archivo aquí';
+      filePreview.classList.remove('visible');
+      progressWrap.classList.remove('visible');
+      etlPhases.classList.remove('visible');
+      resultCard.className = 'sv-result-card';
+      document.getElementById('sv-tipo-label').textContent = 'Se detectará automáticamente al seleccionar el archivo';
+      document.getElementById('sv-tipo-label').style.color = '';
+      document.getElementById('sv-tipo-icon').textContent  = '📄';
+      geomGroup.style.display = 'none';
+      fileInput.value = '';
+      document.getElementById('sv-validation-hints').innerHTML =
+        '<strong>Requisitos del formato</strong>Selecciona un archivo para ver los requisitos específicos.';
+      updateSubmitState();
+    });
+
+    // ── Geometría selector ─────────────────────────────────
+    document.querySelectorAll('.sv-geom-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        document.querySelectorAll('.sv-geom-option').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+        document.getElementById('capa-geometria').value = opt.dataset.value;
+      });
+    });
+
+    // ── Estado del botón submit ────────────────────────────
+    function updateSubmitState() {
+      const proyecto = document.getElementById('capa-proyecto').value;
+      const nombre   = document.getElementById('capa-nombre').value.trim();
+      submitBtn.disabled = !(selectedFile && proyecto && nombre.length >= 3);
+    }
+
+    // El proyecto viene del hidden input, no necesita listener de change
+    document.getElementById('capa-nombre').addEventListener('input', updateSubmitState);
+
+    // ── Progress helpers ───────────────────────────────────
+    function setProgress(pct, label, phase) {
+      document.getElementById('sv-progress-fill').style.width = `${pct}%`;
+      document.getElementById('sv-progress-pct').textContent  = `${pct}%`;
+      if (label) document.getElementById('sv-progress-label').textContent = label;
+      if (phase) document.getElementById('sv-progress-phase').textContent = phase;
+    }
+
+    function setETLPhase(id, status) {
+      // status: 'active' | 'done' | 'error'
+      const el = document.getElementById(`phase-${id}`);
+      if (!el) return;
+      el.className = `sv-etl-phase ${status}`;
+      if (status === 'done')  el.querySelector('.sv-etl-phase-icon').textContent = '✓';
+      if (status === 'error') el.querySelector('.sv-etl-phase-icon').textContent = '✗';
+    }
+
+    // ── Polling del estado ETL ─────────────────────────────
+    async function pollEstado(capaId, maxAttempts = 30) {
+      const delay = ms => new Promise(r => setTimeout(r, ms));
+      let attempts = 0;
+
+      setETLPhase('validate',  'active');
+      setProgress(60, 'Pipeline ETL activo...', 'Validando estructura del archivo...');
+
+      while (attempts < maxAttempts) {
+        await delay(2000);
+        attempts++;
+
+        try {
+          const estado = await API.get(`/api/capas/${capaId}/estado/`);
+
+          if (estado.estado === 'APROBADO') {
+            setETLPhase('validate',  'done');
+            setETLPhase('transform', 'done');
+            setETLPhase('index',     'done');
+            setProgress(100, 'Procesamiento completo', 'Capa lista para visualización');
+            showSuccess(estado);
+            return;
+          }
+
+          if (estado.estado === 'ERROR') {
+            setETLPhase('validate', 'error');
+            setProgress(100, 'Error en el pipeline', estado.mensaje_error || 'Error desconocido');
+            showError(estado.mensaje_error || 'El pipeline falló sin mensaje de error.');
+            return;
+          }
+
+          if (estado.estado === 'PROCESANDO') {
+            setETLPhase('validate',  'done');
+            setETLPhase('transform', 'active');
+            setProgress(75, 'Transformando datos...', 'Convirtiendo a GeoJSON y proyectando...');
+          }
+
+        } catch (err) {
+          console.warn('Polling error:', err);
+        }
+      }
+
+      // Timeout
+      showError('El servidor tardó demasiado en responder. Verifica el estado desde tu panel.');
+    }
+
+    // ── Mostrar resultado exitoso ──────────────────────────
+    function showSuccess(estado) {
+      progressWrap.classList.remove('visible');
+      resultCard.classList.add('success');
+
+      document.getElementById('sv-result-title').textContent = '✓ Capa procesada exitosamente';
+
+      const meta = [
+        estado.num_features  ? `<span>${estado.num_features}</span> features` : '',
+        estado.tipo_geometria ? `Geometría: <span>${estado.tipo_geometria}</span>` : '',
+        estado.sistema_coordenadas ? `CRS: <span>${estado.sistema_coordenadas}</span>` : '',
+        estado.tipo_archivo ? `Tipo: <span>${estado.tipo_archivo}</span>` : '',
+      ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+
+      document.getElementById('sv-result-meta').innerHTML = meta;
+      document.getElementById('sv-result-actions').innerHTML = `
+        <a href="dashboard.html?capa=${estado.capa_id || uploadedCapaId}"
+           class="sv-btn sv-btn-primary">
+          🗺️ Ver en mapa
+        </a>
+        <button class="sv-btn sv-btn-outline" id="sv-upload-another-btn">
+          ↑ Subir otra capa
+        </button>
+      `;
+
+      document.getElementById('sv-upload-another-btn')?.addEventListener('click', () => {
+        window.location.reload();
+      });
+
+      setButtonLoading(submitBtn, false);
+      submitBtn.disabled = true;
+    }
+
+    // ── Mostrar resultado de error ─────────────────────────
+    function showError(message) {
+      progressWrap.classList.remove('visible');
+      resultCard.classList.add('error');
+      // Título descriptivo según tipo de error
+      const isLatLonErr = message && (
+        message.toLowerCase().includes('latitud') ||
+        message.toLowerCase().includes('longitud') ||
+        (message.toLowerCase().includes('lat') && message.toLowerCase().includes('lon')) ||
+        message.toLowerCase().includes('coordenadas') ||
+        message.toLowerCase().includes('column')
+      );
+      document.getElementById('sv-result-title').textContent = isLatLonErr
+        ? '✗ Columnas Latitud / Longitud no encontradas en el archivo'
+        : '✗ Error al procesar el archivo';
+      document.getElementById('sv-result-meta').innerHTML =
+        `<div class="sv-error-list">
+          <div class="sv-error-item">${message}</div>
+        </div>`;
+      document.getElementById('sv-result-actions').innerHTML = `
+        <button class="sv-btn sv-btn-outline" onclick="window.location.reload()">
+          ↩ Intentar de nuevo
+        </button>
+        <a href="panel.html" class="sv-btn sv-btn-ghost">← Volver al panel</a>
+      `;
+      setButtonLoading(submitBtn, false);
+      submitBtn.disabled = false;
+    }
+
+    // ── Submit ─────────────────────────────────────────────
+    uploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearAlert('sv-form-alert');
+      clearFieldErrors('sv-upload-form');
+
+      // Validación final
+      const proyecto   = document.getElementById('capa-proyecto').value;
+      const nombre     = document.getElementById('capa-nombre').value.trim();
+      const descripcion= document.getElementById('capa-descripcion').value.trim();
+      const geometria  = document.getElementById('capa-geometria').value;
+
+      const fieldErrors = {};
+      if (!proyecto) {
+        showAlert('sv-form-alert',
+          'No hay proyecto seleccionado. Vuelve al panel y usa el botón "↑ Capa".',
+          'error');
+        return;
+      }
+      if (nombre.length < 3) fieldErrors['nombre'] = 'El nombre debe tener al menos 3 caracteres.';
+      if (!selectedFile) { showAlert('sv-form-alert', 'Selecciona un archivo primero.', 'error'); return; }
+
+      if (Object.keys(fieldErrors).length) {
+        showFieldErrors(fieldErrors);
+        return;
+      }
+
+      // UI upload state
+      setButtonLoading(submitBtn, true);
+      progressWrap.classList.add('visible');
+      etlPhases.classList.add('visible');
+      resultCard.className = 'sv-result-card';
+      setETLPhase('upload', 'active');
+      setProgress(0, 'Preparando subida...', 'Iniciando conexión con el servidor...');
+
+      // Construir FormData
+      const fd = new FormData();
+      fd.append('archivo',      selectedFile);
+      fd.append('proyecto',     proyecto);
+      fd.append('nombre',       nombre);
+      fd.append('descripcion',  descripcion);
+      fd.append('tipo_archivo', detectedType);
+      if (detectedType === 'SHAPE') {
+        fd.append('tipo_geometria', geometria);
+      }
+
+      // XMLHttpRequest para progreso real
+      const token = TokenStore.getAccess();
+      const xhr   = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (ev) => {
+        if (!ev.lengthComputable) return;
+        const pct = Math.round((ev.loaded / ev.total) * 45);
+        setProgress(pct, 'Subiendo archivo...', `${formatBytes(ev.loaded)} / ${formatBytes(ev.total)}`);
+      });
+
+      xhr.upload.addEventListener('load', () => {
+        setETLPhase('upload', 'done');
+        setProgress(50, 'Archivo recibido — iniciando ETL...', 'El servidor está procesando el archivo...');
+      });
+
+      xhr.addEventListener('load', async () => {
+        let data;
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch {
+          showError('Respuesta inesperada del servidor.');
+          return;
+        }
+
+        if (xhr.status === 202 || xhr.status === 200) {
+          uploadedCapaId = data.capa_id;
+
+          if (data.estado === 'APROBADO') {
+            // ETL síncrono ya terminó
+            setETLPhase('validate',  'done');
+            setETLPhase('transform', 'done');
+            setETLPhase('index',     'done');
+            setProgress(100, 'Procesamiento completo', 'Capa indexada exitosamente');
+            showSuccess({ ...data.meta, capa_id: uploadedCapaId, estado: 'APROBADO' });
+          } else if (data.estado === 'ERROR') {
+            showError(data.mensaje || 'Error en el pipeline ETL.');
+          } else {
+            // PENDIENTE o PROCESANDO — polling
+            await pollEstado(uploadedCapaId);
+          }
+        } else {
+          // Errores de validación por campo
+          const errors = data;
+          const fieldMap = {};
+          let genericMsg = '';
+
+          if (typeof errors === 'object') {
+            for (const [field, val] of Object.entries(errors)) {
+              const msg = Array.isArray(val) ? val[0] : String(val);
+              if (['archivo','proyecto','nombre','descripcion','tipo_archivo'].includes(field)) {
+                fieldMap[field] = msg;
+              } else if (field === 'detail') {
+                genericMsg = msg;
+              } else {
+                genericMsg += (genericMsg ? ' | ' : '') + `${field}: ${msg}`;
+              }
+            }
+          }
+
+          if (Object.keys(fieldMap).length) showFieldErrors(fieldMap);
+          if (genericMsg) showAlert('sv-form-alert', genericMsg, 'error');
+
+          progressWrap.classList.remove('visible');
+          etlPhases.classList.remove('visible');
+          setButtonLoading(submitBtn, false);
+          submitBtn.disabled = false;
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        showError('Error de red. Verifica tu conexión e intenta de nuevo.');
+      });
+
+      xhr.open('POST', 'http://localhost:8001/api/capas/subir/');
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.send(fd);
+    });
+  </script>
+</body>
+</html>

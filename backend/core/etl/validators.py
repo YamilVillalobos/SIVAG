@@ -10,13 +10,17 @@ ValidationResult es un dataclass con:
   ok          : bool
   error_msg   : str        — vacío si ok=True
   meta        : dict       — metadatos extraídos durante la validación
-                             (CRS, columnas, num_features, bbox, bandas, etc.)
 
 Formatos soportados:
-  Excel   (.xlsx)  — puntos con columnas lat/lon
-  CSV     (.csv)   — igual que Excel, motor diferente
-  Shape   (.zip)   — Shapefile comprimido
-  GeoTIFF (.tiff)  — ráster nativo, se valida y procesa tal cual (sin conversión a GeoJSON)
+  Excel   (.xlsx)  — flexible: acepta varias variantes de nombres lat/lon
+  CSV     (.csv)   — estricto: columnas deben llamarse 'Latitud' y 'Longitud'
+  Shape   (.zip)   — Shapefile comprimido en ZIP
+  GeoTIFF (.tiff)  — ráster nativo, se preserva sin conversión
+
+Estándar SIVAG para CSV:
+  Las columnas de coordenadas deben llamarse exactamente 'Latitud' y 'Longitud'
+  (sin importar mayúsculas/minúsculas). Todas las demás columnas son libres,
+  se leen automáticamente y se clasifican por tipo para graficación posterior.
 
 Requisito IEEE: RF-03 — Validación Geoespacial y Conversión Automática
 """
@@ -50,9 +54,17 @@ class ValidationResult:
 # Constantes de configuración
 # ─────────────────────────────────────────────────────────
 
-# Columnas candidatas para latitud / longitud (case-insensitive)
-LAT_CANDIDATES = ["lat", "latitude", "latitud", "y", "lat_grado", "coords_lat"]
-LON_CANDIDATES = ["lon", "lng", "longitude", "longitud", "x", "lon_grado", "coords_lon"]
+# ── Estándar SIVAG para CSV ──────────────────────────────
+# Los CSV deben tener EXACTAMENTE estas palabras como columnas
+# de coordenadas (sin importar mayúsculas/minúsculas ni espacios).
+CSV_LAT_STANDARD = "latitud"
+CSV_LON_STANDARD = "longitud"
+
+# ── Candidatos flexibles para Excel ─────────────────────
+# Excel acepta más variantes por compatibilidad con archivos
+# externos que el investigador no siempre puede editar.
+EXCEL_LAT_CANDIDATES = ["lat", "latitude", "latitud", "y", "lat_grado", "coords_lat"]
+EXCEL_LON_CANDIDATES = ["lon", "lng", "longitude", "longitud", "x", "lon_grado", "coords_lon"]
 
 # Rango válido de coordenadas geográficas
 LAT_RANGE = (-90.0, 90.0)
@@ -63,101 +75,155 @@ MAX_FILE_SIZE = 100 * 1024 * 1024
 
 
 # ─────────────────────────────────────────────────────────
-# Helper: detectar columnas de coordenadas
+# Helpers: detección de columnas de coordenadas
 # ─────────────────────────────────────────────────────────
 
-def _detect_coord_columns(columns: list[str]) -> tuple[Optional[str], Optional[str]]:
+def _detect_coord_columns_csv(columns: list[str]) -> tuple[Optional[str], Optional[str]]:
     """
-    Busca columnas de latitud y longitud en los encabezados del archivo.
-    Devuelve (col_lat, col_lon) o (None, None) si no las encuentra.
+    Detección ESTRICTA para CSV (estándar SIVAG).
+    Solo acepta columnas cuyo nombre normalizado sea
+    exactamente 'latitud' y 'longitud'.
     """
     lower_map = {c.lower().strip(): c for c in columns}
-    col_lat = next((lower_map[c] for c in LAT_CANDIDATES if c in lower_map), None)
-    col_lon = next((lower_map[c] for c in LON_CANDIDATES if c in lower_map), None)
+    col_lat = lower_map.get(CSV_LAT_STANDARD)
+    col_lon = lower_map.get(CSV_LON_STANDARD)
+    return col_lat, col_lon
+
+
+def _detect_coord_columns_excel(columns: list[str]) -> tuple[Optional[str], Optional[str]]:
+    """
+    Detección FLEXIBLE para Excel.
+    Acepta múltiples variantes de nombres de columnas lat/lon.
+    """
+    lower_map = {c.lower().strip(): c for c in columns}
+    col_lat = next((lower_map[c] for c in EXCEL_LAT_CANDIDATES if c in lower_map), None)
+    col_lon = next((lower_map[c] for c in EXCEL_LON_CANDIDATES if c in lower_map), None)
     return col_lat, col_lon
 
 
 # ─────────────────────────────────────────────────────────
-# Helper interno: validar DataFrame tabular (Excel y CSV comparten la misma lógica)
+# Helper: clasificar columnas adicionales por tipo de dato
 # ─────────────────────────────────────────────────────────
 
-def _validate_dataframe(df: pd.DataFrame) -> ValidationResult:
+def _clasificar_columnas(df: pd.DataFrame, col_lat: str, col_lon: str) -> dict:
     """
-    Valida un DataFrame ya cargado (desde Excel o CSV).
-    Detecta columnas lat/lon, verifica NaN y rangos.
-    Retorna ValidationResult con meta completo si ok=True.
+    Clasifica TODAS las columnas del DataFrame (excepto lat/lon) según su
+    tipo de dato para habilitar la graficación automática en el frontend.
+
+    Categorías:
+      numericas   → int, float  → histograma, scatter, boxplot, heatmap
+      categoricas → texto, bool → barras, pie, nube de palabras
+      fechas      → datetime    → serie de tiempo
+
+    Retorna:
+      {
+        "schema":       {col: dtype_str, ...},  — tipo de cada columna
+        "numericas":    [col, ...],
+        "categoricas":  [col, ...],
+        "fechas":       [col, ...],
+        "total":        int,
+      }
     """
-    result = ValidationResult()
+    numericas   = []
+    categoricas = []
+    fechas      = []
+    schema      = {}
 
-    if df.empty:
-        result.error_msg = "El archivo está vacío o no contiene datos."
-        return result
+    for col in df.columns:
+        # Saltar columnas de coordenadas
+        if col in (col_lat, col_lon):
+            continue
 
-    # ── Detectar columnas de coordenadas ─────────────────
-    col_lat, col_lon = _detect_coord_columns(df.columns.tolist())
+        dtype_str = str(df[col].dtype)
 
-    if col_lat is None:
-        candidatos = ", ".join(LAT_CANDIDATES)
-        result.error_msg = (
-            f"No se encontró columna de latitud. "
-            f"Asegúrate de que el encabezado sea uno de: {candidatos}."
-        )
-        return result
+        # ── Detectar fechas en columnas de texto ─────────
+        if df[col].dtype == object:
+            try:
+                pd.to_datetime(df[col], infer_datetime_format=True, errors="raise")
+                fechas.append(col)
+                schema[col] = "datetime"
+                continue
+            except Exception:
+                pass
+            categoricas.append(col)
+            schema[col] = dtype_str
 
-    if col_lon is None:
-        candidatos = ", ".join(LON_CANDIDATES)
-        result.error_msg = (
-            f"No se encontró columna de longitud. "
-            f"Asegúrate de que el encabezado sea uno de: {candidatos}."
-        )
-        return result
+        # ── Numérico ─────────────────────────────────────
+        elif pd.api.types.is_numeric_dtype(df[col]):
+            numericas.append(col)
+            schema[col] = dtype_str
 
-    # ── Convertir a numérico ─────────────────────────────
+        # ── Fecha nativa de pandas ────────────────────────
+        elif pd.api.types.is_datetime64_any_dtype(df[col]):
+            fechas.append(col)
+            schema[col] = "datetime"
+
+        # ── Cualquier otro tipo (bool, category, etc.) ────
+        else:
+            categoricas.append(col)
+            schema[col] = dtype_str
+
+    return {
+        "schema":      schema,
+        "numericas":   numericas,
+        "categoricas": categoricas,
+        "fechas":      fechas,
+        "total":       len(schema),
+    }
+
+
+# ─────────────────────────────────────────────────────────
+# Helper: validar valores numéricos y rangos de coordenadas
+# ─────────────────────────────────────────────────────────
+
+def _validate_coords(df: pd.DataFrame, col_lat: str, col_lon: str) -> Optional[str]:
+    """
+    Valida los valores de las columnas de coordenadas.
+    Modifica el DataFrame in-place convirtiendo a numérico.
+    Retorna un mensaje de error (str) o None si todo está bien.
+    """
     try:
         df[col_lat] = pd.to_numeric(df[col_lat], errors="coerce")
         df[col_lon] = pd.to_numeric(df[col_lon], errors="coerce")
     except Exception as e:
-        result.error_msg = f"Error al convertir coordenadas a numérico: {e}"
-        return result
+        return f"Error al convertir coordenadas a numérico: {e}"
 
-    # ── Detectar NaN ─────────────────────────────────────
     nulos_lat = df[col_lat].isna().sum()
     nulos_lon = df[col_lon].isna().sum()
 
     if nulos_lat > 0 or nulos_lon > 0:
         primer_error = df[df[col_lat].isna() | df[col_lon].isna()].index[0] + 2
-        result.error_msg = (
+        return (
             f"Coordenadas vacías o no numéricas: "
-            f"{nulos_lat} fila(s) con latitud inválida, "
-            f"{nulos_lon} fila(s) con longitud inválida. "
+            f"{nulos_lat} fila(s) con Latitud inválida, "
+            f"{nulos_lon} fila(s) con Longitud inválida. "
             f"Primera ocurrencia en fila {primer_error}."
         )
-        return result
 
-    # ── Validar rangos ───────────────────────────────────
     fuera_lat = df[(df[col_lat] < LAT_RANGE[0]) | (df[col_lat] > LAT_RANGE[1])]
-    fuera_lon = df[(df[col_lon] < LON_RANGE[0]) | (df[col_lon] > LON_RANGE[1])]
-
     if not fuera_lat.empty:
         fila = fuera_lat.index[0] + 2
         val  = fuera_lat.iloc[0][col_lat]
-        result.error_msg = (
+        return (
             f"Latitud fuera de rango en fila {fila}: {val} "
             f"(válido: {LAT_RANGE[0]} a {LAT_RANGE[1]})."
         )
-        return result
 
+    fuera_lon = df[(df[col_lon] < LON_RANGE[0]) | (df[col_lon] > LON_RANGE[1])]
     if not fuera_lon.empty:
         fila = fuera_lon.index[0] + 2
         val  = fuera_lon.iloc[0][col_lon]
-        result.error_msg = (
+        return (
             f"Longitud fuera de rango en fila {fila}: {val} "
             f"(válido: {LON_RANGE[0]} a {LON_RANGE[1]})."
         )
-        return result
 
-    # ── Construir metadatos ──────────────────────────────
-    schema = {col: str(df[col].dtype) for col in df.columns}
+    return None
+
+
+def _build_meta(df: pd.DataFrame, col_lat: str, col_lon: str, extra: dict = None) -> dict:
+    """Construye el dict de metadatos completo para un DataFrame validado."""
+    clasificacion = _clasificar_columnas(df, col_lat, col_lon)
     bbox = [
         float(df[col_lon].min()),
         float(df[col_lat].min()),
@@ -165,18 +231,25 @@ def _validate_dataframe(df: pd.DataFrame) -> ValidationResult:
         float(df[col_lat].max()),
     ]
 
-    result.ok = True
-    result.meta = {
-        "columnas":            df.columns.tolist(),
-        "columna_lat":         col_lat,
-        "columna_lon":         col_lon,
-        "num_rows":            len(df),
-        "num_validas":         len(df),
-        "columnas_schema":     schema,
-        "bbox":                bbox,
-        "sistema_coordenadas": "EPSG:4326",
+    meta = {
+        "columnas":             df.columns.tolist(),
+        "columna_lat":          col_lat,
+        "columna_lon":          col_lon,
+        "num_rows":             len(df),
+        "num_validas":          len(df),
+        "columnas_schema":      clasificacion["schema"],
+        "columnas_numericas":   clasificacion["numericas"],
+        "columnas_categoricas": clasificacion["categoricas"],
+        "columnas_fechas":      clasificacion["fechas"],
+        "total_atributos":      clasificacion["total"],
+        "bbox":                 bbox,
+        "sistema_coordenadas":  "EPSG:4326",
     }
-    return result
+
+    if extra:
+        meta.update(extra)
+
+    return meta
 
 
 # ─────────────────────────────────────────────────────────
@@ -186,16 +259,47 @@ def _validate_dataframe(df: pd.DataFrame) -> ValidationResult:
 def validate_excel(filepath: str) -> ValidationResult:
     """
     Valida un archivo Excel (.xlsx) para uso geoespacial.
-    Carga con openpyxl y delega la lógica a _validate_dataframe.
+    Detección flexible de columnas lat/lon.
+    Clasifica todas las columnas adicionales automáticamente.
     """
     result = ValidationResult()
+
     try:
         df = pd.read_excel(filepath, engine="openpyxl")
     except Exception as e:
         result.error_msg = f"No se pudo leer el archivo Excel: {e}"
         return result
 
-    return _validate_dataframe(df)
+    if df.empty:
+        result.error_msg = "El archivo Excel está vacío o no contiene datos."
+        return result
+
+    col_lat, col_lon = _detect_coord_columns_excel(df.columns.tolist())
+
+    if col_lat is None:
+        candidatos = ", ".join(EXCEL_LAT_CANDIDATES)
+        result.error_msg = (
+            f"No se encontró columna de latitud. "
+            f"Asegúrate de que el encabezado sea uno de: {candidatos}."
+        )
+        return result
+
+    if col_lon is None:
+        candidatos = ", ".join(EXCEL_LON_CANDIDATES)
+        result.error_msg = (
+            f"No se encontró columna de longitud. "
+            f"Asegúrate de que el encabezado sea uno de: {candidatos}."
+        )
+        return result
+
+    error = _validate_coords(df, col_lat, col_lon)
+    if error:
+        result.error_msg = error
+        return result
+
+    result.ok   = True
+    result.meta = _build_meta(df, col_lat, col_lon)
+    return result
 
 
 # ─────────────────────────────────────────────────────────
@@ -206,18 +310,21 @@ def validate_csv(filepath: str) -> ValidationResult:
     """
     Valida un archivo CSV para uso geoespacial.
 
-    Intentamos detectar el separador automáticamente (coma, punto y coma
-    o tabulador) usando el Sniffer de Python antes de cargar el DataFrame.
-    La lógica de validación de coordenadas es idéntica a la del Excel.
+    Estándar SIVAG — columnas de coordenadas OBLIGATORIAS:
+      'Latitud'  (acepta: LATITUD, latitud, Latitud, lAtItUd, etc.)
+      'Longitud' (acepta: LONGITUD, longitud, Longitud, etc.)
 
-    Metadatos devueltos: idénticos a validate_excel.
+    Todas las demás columnas son completamente libres: se leen en
+    su totalidad, se detecta su tipo (numérico, categórico, fecha)
+    y se incluyen en los metadatos para graficación posterior.
+
+    Separador: se detecta automáticamente (coma, punto y coma, tabulador).
+    Encoding:  se prueba UTF-8, UTF-8 BOM, Latin-1 y CP1252 en ese orden.
     """
     result = ValidationResult()
 
-    # ── Detectar encoding y separador ────────────────────
+    # ── 1. Detectar separador ────────────────────────────
     separador = ","
-    encoding  = "utf-8"
-
     try:
         import csv as csv_module
         with open(filepath, "r", encoding="utf-8", errors="replace") as f:
@@ -225,13 +332,14 @@ def validate_csv(filepath: str) -> ValidationResult:
         dialecto  = csv_module.Sniffer().sniff(muestra, delimiters=",;\t")
         separador = dialecto.delimiter
     except Exception:
-        # Si el sniffer falla, usamos coma por defecto
         separador = ","
 
-    # ── Leer archivo ─────────────────────────────────────
+    # ── 2. Leer con detección de encoding ────────────────
+    df       = None
+    encoding = "utf-8"
     for enc in ("utf-8", "utf-8-sig", "latin-1", "cp1252"):
         try:
-            df = pd.read_csv(filepath, sep=separador, encoding=enc)
+            df       = pd.read_csv(filepath, sep=separador, encoding=enc)
             encoding = enc
             break
         except UnicodeDecodeError:
@@ -239,19 +347,59 @@ def validate_csv(filepath: str) -> ValidationResult:
         except Exception as e:
             result.error_msg = f"No se pudo leer el archivo CSV: {e}"
             return result
-    else:
+
+    if df is None:
         result.error_msg = (
             "No se pudo leer el archivo CSV. "
-            "Asegúrate de que esté guardado en UTF-8, UTF-8 BOM, Latin-1 o CP1252."
+            "Asegúrate de que esté guardado en UTF-8, Latin-1 o CP1252."
         )
         return result
 
-    # Agregar info de lectura al resultado
-    vr = _validate_dataframe(df)
-    if vr.ok:
-        vr.meta["encoding_detectado"] = encoding
-        vr.meta["separador_detectado"] = separador
-    return vr
+    if df.empty:
+        result.error_msg = "El archivo CSV está vacío o no contiene datos."
+        return result
+
+    # ── 3. Verificar estándar SIVAG ──────────────────────
+    col_lat, col_lon = _detect_coord_columns_csv(df.columns.tolist())
+
+    if col_lat is None and col_lon is None:
+        result.error_msg = (
+            "El CSV no cumple con el estándar SIVAG. "
+            "Se requieren columnas llamadas exactamente 'Latitud' y 'Longitud' "
+            "(sin importar mayúsculas o minúsculas). "
+            f"Columnas encontradas: {', '.join(df.columns.tolist())}."
+        )
+        return result
+
+    if col_lat is None:
+        result.error_msg = (
+            "El CSV no cumple con el estándar SIVAG. "
+            "Falta la columna 'Latitud'. "
+            f"Columnas encontradas: {', '.join(df.columns.tolist())}."
+        )
+        return result
+
+    if col_lon is None:
+        result.error_msg = (
+            "El CSV no cumple con el estándar SIVAG. "
+            "Falta la columna 'Longitud'. "
+            f"Columnas encontradas: {', '.join(df.columns.tolist())}."
+        )
+        return result
+
+    # ── 4. Validar valores de coordenadas ────────────────
+    error = _validate_coords(df, col_lat, col_lon)
+    if error:
+        result.error_msg = error
+        return result
+
+    # ── 5. Metadatos completos con clasificación de columnas
+    result.ok   = True
+    result.meta = _build_meta(df, col_lat, col_lon, extra={
+        "encoding_detectado":  encoding,
+        "separador_detectado": separador,
+    })
+    return result
 
 
 # ─────────────────────────────────────────────────────────
@@ -263,39 +411,28 @@ def validate_shapefile(filepath: str) -> ValidationResult:
     Valida un Shapefile comprimido en ZIP (.zip).
 
     Verificaciones:
-      1. Es un archivo ZIP válido.
-      2. Contiene al menos un .shp dentro.
-      3. El .shp es legible con Fiona (no corrupto).
-      4. Posee un sistema de coordenadas definido.
-      5. Contiene al menos 1 feature.
-      6. Los tipos de geometría son soportados.
-
-    Metadatos devueltos:
-      shp_filename        : nombre del .shp encontrado
-      sistema_coordenadas : código EPSG como string (ej "EPSG:4326")
-      tipo_geometria      : PUNTO | LINEA | POLIGONO | MIXTO
-      num_features        : cantidad de features
-      columnas_schema     : {campo: tipo_fiona, ...}
-      bbox                : [min_lon, min_lat, max_lon, max_lat]
-      crs_original        : WKT del CRS original
+      1. Es un ZIP válido.
+      2. Contiene al menos un .shp.
+      3. Legible con Fiona.
+      4. CRS definido.
+      5. Al menos 1 feature.
+      6. Tipo de geometría soportado.
     """
     result = ValidationResult()
 
-    # ── 1. Verificar ZIP ─────────────────────────────────
     if not zipfile.is_zipfile(filepath):
         result.error_msg = "El archivo no es un ZIP válido."
         return result
 
     with zipfile.ZipFile(filepath, "r") as zf:
-        nombres = zf.namelist()
-
-        # ── 2. Buscar .shp ──────────────────────────────
+        nombres   = zf.namelist()
         shp_files = [n for n in nombres if n.lower().endswith(".shp")]
+
         if not shp_files:
             result.error_msg = (
                 "No se encontró ningún archivo .shp dentro del ZIP. "
-                "Asegúrate de comprimir los archivos (.shp, .shx, .dbf, .prj) "
-                "directamente, no dentro de una carpeta."
+                "Comprime los archivos (.shp, .shx, .dbf, .prj) directamente, "
+                "no dentro de una carpeta."
             )
             return result
 
@@ -307,20 +444,17 @@ def validate_shapefile(filepath: str) -> ValidationResult:
 
                 if src.crs is None:
                     result.error_msg = (
-                        f"El Shapefile '{shp_name}' no tiene un sistema de "
-                        "coordenadas definido (.prj ausente o inválido)."
+                        f"El Shapefile '{shp_name}' no tiene CRS definido "
+                        "(.prj ausente o inválido)."
                     )
                     return result
 
                 num_features = len(src)
                 if num_features == 0:
-                    result.error_msg = (
-                        f"El Shapefile '{shp_name}' no contiene ningún feature."
-                    )
+                    result.error_msg = f"El Shapefile '{shp_name}' no contiene features."
                     return result
 
-                geom_type_raw = src.schema["geometry"]
-                tipo = _map_geom_type(geom_type_raw)
+                tipo = _map_geom_type(src.schema["geometry"])
 
                 try:
                     crs_obj = CRS.from_wkt(src.crs.wkt) if hasattr(src.crs, "wkt") else CRS(src.crs)
@@ -343,26 +477,20 @@ def validate_shapefile(filepath: str) -> ValidationResult:
 
     result.ok = True
     result.meta = {
-        "shp_filename":         shp_name,
-        "sistema_coordenadas":  crs_str,
-        "crs_original":         crs_wkt,
-        "tipo_geometria":       tipo,
-        "num_features":         num_features,
-        "columnas_schema":      schema_fields,
-        "bbox":                 bbox_list,
+        "shp_filename":        shp_name,
+        "sistema_coordenadas": crs_str,
+        "crs_original":        crs_wkt,
+        "tipo_geometria":      tipo,
+        "num_features":        num_features,
+        "columnas_schema":     schema_fields,
+        "bbox":                bbox_list,
     }
     return result
 
 
 def _map_geom_type(fiona_type: str) -> str:
-    """Convierte el tipo de geometría de Fiona al enum TipoGeometria de SIVAG."""
     t = fiona_type.upper().replace("MULTI", "").strip()
-    mapping = {
-        "POINT":      "PUNTO",
-        "LINESTRING": "LINEA",
-        "POLYGON":    "POLIGONO",
-    }
-    return mapping.get(t, "MIXTO")
+    return {"POINT": "PUNTO", "LINESTRING": "LINEA", "POLYGON": "POLIGONO"}.get(t, "MIXTO")
 
 
 # ─────────────────────────────────────────────────────────
@@ -372,70 +500,38 @@ def _map_geom_type(fiona_type: str) -> str:
 def validate_geotiff(filepath: str) -> ValidationResult:
     """
     Valida un archivo GeoTIFF.
-
-    El GeoTIFF se procesa y sirve TAL CUAL (el archivo original se conserva
-    íntegro). No se convierte a GeoJSON ni se transforma la información.
-    El pipeline solo genera overviews para optimizar la visualización en
-    Leaflet con TileLayer.GeoTIFF o similar.
-
-    Verificaciones:
-      1. El archivo se puede abrir con rasterio.
-      2. Tiene al menos 1 banda.
-      3. Posee un CRS definido.
-      4. El transform no es identidad (tiene georeferenciación real).
-      5. Las dimensiones son razonables (> 10×10 píxeles).
-
-    Metadatos devueltos:
-      sistema_coordenadas : código EPSG como string
-      crs_original        : WKT completo del CRS
-      num_bandas          : cantidad de bandas
-      ancho               : píxeles horizontales
-      alto                : píxeles verticales
-      dtype               : tipo de dato de banda 1 (uint8, float32, etc.)
-      bbox                : [min_lon, min_lat, max_lon, max_lat] en EPSG:4326
-      resolucion_x        : resolución espacial en X (unidades del CRS)
-      resolucion_y        : resolución espacial en Y (unidades del CRS)
-      banda_min           : valor mínimo de la banda 1
-      banda_max           : valor máximo de la banda 1
-      nodata              : valor nodata declarado (o None)
-      necesita_reproyeccion: True si el CRS no es EPSG:4326
+    El archivo se preserva TAL CUAL (sin conversión a GeoJSON).
+    El pipeline solo añade overviews para optimizar la visualización.
     """
     result = ValidationResult()
 
     try:
         with rasterio.open(filepath) as src:
 
-            # ── 1. Verificar bandas ──────────────────────
             if src.count == 0:
                 result.error_msg = "El GeoTIFF no contiene ninguna banda de datos."
                 return result
 
-            # ── 2. Verificar CRS ─────────────────────────
             if src.crs is None:
                 result.error_msg = (
-                    "El GeoTIFF no tiene un sistema de coordenadas definido. "
-                    "Asegúrate de exportarlo con la proyección correcta desde tu software SIG."
+                    "El GeoTIFF no tiene CRS definido. "
+                    "Expórtalo con la proyección correcta desde tu software SIG."
                 )
                 return result
 
-            # ── 3. Verificar georeferenciación real ──────
             if src.transform.is_identity:
                 result.error_msg = (
-                    "El GeoTIFF no tiene georeferenciación (transform es identidad). "
-                    "El archivo es una imagen sin coordenadas espaciales."
+                    "El GeoTIFF no tiene georeferenciación (transform es identidad)."
                 )
                 return result
 
-            # ── 4. Verificar dimensiones mínimas ─────────
             if src.width < 10 or src.height < 10:
                 result.error_msg = (
-                    f"El GeoTIFF tiene dimensiones muy pequeñas "
-                    f"({src.width}×{src.height} px). "
-                    "El mínimo requerido es 10×10 píxeles."
+                    f"Dimensiones muy pequeñas ({src.width}×{src.height} px). "
+                    "Mínimo requerido: 10×10 px."
                 )
                 return result
 
-            # ── 5. Obtener EPSG y WKT ────────────────────
             try:
                 epsg    = src.crs.to_epsg()
                 crs_str = f"EPSG:{epsg}" if epsg else src.crs.to_string()
@@ -447,7 +543,6 @@ def validate_geotiff(filepath: str) -> ValidationResult:
             except Exception:
                 crs_wkt = str(src.crs)
 
-            # ── 6. Calcular bbox en EPSG:4326 ────────────
             from rasterio.warp import transform_bounds
             try:
                 bounds_4326 = transform_bounds(src.crs, "EPSG:4326", *src.bounds)
@@ -455,7 +550,6 @@ def validate_geotiff(filepath: str) -> ValidationResult:
             except Exception:
                 bbox = list(src.bounds)
 
-            # ── 7. Estadísticas de banda 1 ────────────────
             try:
                 band_data = src.read(1, masked=True)
                 banda_min = float(np.ma.min(band_data))
@@ -464,29 +558,22 @@ def validate_geotiff(filepath: str) -> ValidationResult:
                 banda_min = None
                 banda_max = None
 
-            # ── 8. Metadatos adicionales del ráster ──────
-            transform     = src.transform
-            resolucion_x  = abs(transform.a)   # tamaño de píxel en X
-            resolucion_y  = abs(transform.e)   # tamaño de píxel en Y
-            nodata        = src.nodata
+            resolucion_x = abs(src.transform.a)
+            resolucion_y = abs(src.transform.e)
+            nodata       = src.nodata
 
-            # ¿Necesita reproyección para visualizarse en Leaflet?
             try:
                 necesita_reproyeccion = not src.crs.equals("EPSG:4326")
             except Exception:
                 necesita_reproyeccion = True
 
-            # Guardamos estos para usarlos en el pipeline
             num_bandas = src.count
             ancho      = src.width
             alto       = src.height
             dtype      = str(src.dtypes[0])
 
     except rasterio.errors.RasterioIOError as e:
-        result.error_msg = (
-            f"No se pudo abrir el GeoTIFF "
-            f"(archivo corrupto o formato no soportado): {e}"
-        )
+        result.error_msg = f"No se pudo abrir el GeoTIFF (corrupto o formato no soportado): {e}"
         return result
     except Exception as e:
         result.error_msg = f"Error inesperado al leer el GeoTIFF: {e}"

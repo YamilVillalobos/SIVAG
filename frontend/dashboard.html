@@ -1,0 +1,3490 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — SIVAG</title>
+
+  <!-- Sistema de diseño SIVAG -->
+  <link rel="stylesheet" href="css/sivag.css" />
+
+  <!-- Leaflet.js -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+  <!-- Leaflet fullscreen -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/3.0.2/Control.FullScreen.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.fullscreen/3.0.2/Control.FullScreen.min.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <!-- GeoRaster: renderizado nativo de GeoTIFF en Leaflet sin conversión -->
+  <script src="https://unpkg.com/georaster@1.6.0/dist/georaster.browser.bundle.min.js"></script>
+  <script src="https://unpkg.com/georaster-layer-for-leaflet@3.10.0/dist/georaster-layer-for-leaflet.min.js"></script>
+
+  <style>
+
+    /* ══ SIDENAV DE NAVEGACIÓN (igual que panel y explorador) ══ */
+    .sv-sidenav {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--bg-dark);
+      border-right: 1px solid var(--border-dim);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 100;
+      transition: width 0.28s cubic-bezier(.4,0,.2,1);
+    }
+    .sv-sidenav.collapsed { width: 58px; }
+    .sv-sidenav-logo {
+      display:flex; align-items:center; gap:10px;
+      padding:18px 14px 14px;
+      border-bottom:1px solid var(--border-dim);
+      text-decoration:none; overflow:hidden; flex-shrink:0;
+    }
+    .sv-sidenav-logo-mark {
+      width:30px; height:30px; border-radius:var(--radius-md);
+      background:linear-gradient(135deg,var(--accent-cyan),var(--accent-teal));
+      display:flex; align-items:center; justify-content:center;
+      font-size:13px; font-weight:900; color:var(--bg-deep); flex-shrink:0;
+    }
+    .sv-sidenav-logo-text {
+      font-family:var(--font-display); font-size:15px; font-weight:900;
+      color:var(--text-primary); letter-spacing:2px; white-space:nowrap;
+    }
+    .sv-sidenav-logo-sub {
+      font-family:var(--font-mono); font-size:7px; letter-spacing:1.5px;
+      text-transform:uppercase; color:var(--text-muted); white-space:nowrap;
+    }
+    .sv-sidenav-user {
+      display:flex; align-items:center; gap:10px; padding:12px 14px;
+      border-bottom:1px solid var(--border-dim); overflow:hidden; flex-shrink:0;
+    }
+    .sv-sidenav-avatar {
+      width:32px; height:32px; border-radius:50%;
+      background:linear-gradient(135deg,var(--accent-blue),var(--accent-cyan));
+      display:flex; align-items:center; justify-content:center;
+      font-family:var(--font-display); font-size:13px; font-weight:700;
+      color:#fff; flex-shrink:0;
+    }
+    .sv-sidenav-user-name {
+      font-family:var(--font-display); font-size:12px; font-weight:600;
+      color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .sv-sidenav-user-role {
+      font-family:var(--font-mono); font-size:9px; letter-spacing:1px;
+      text-transform:uppercase; color:var(--accent-cyan); margin-top:1px;
+    }
+    .sv-sidenav-nav {
+      flex:1; overflow-y:auto; overflow-x:hidden; padding:8px; scrollbar-width:none;
+    }
+    .sv-sidenav-section {
+      font-family:var(--font-mono); font-size:8px; letter-spacing:2px;
+      text-transform:uppercase; color:var(--text-muted); padding:8px 8px 3px;
+      white-space:nowrap; overflow:hidden;
+    }
+    .sv-nav-item {
+      display:flex; align-items:center; gap:9px; padding:8px 10px;
+      border-radius:var(--radius-md); text-decoration:none; color:var(--text-secondary);
+      font-family:var(--font-display); font-size:13px; font-weight:500;
+      transition:var(--transition); border:1px solid transparent;
+      margin-bottom:2px; white-space:nowrap; overflow:hidden; cursor:pointer;
+    }
+    .sv-nav-item:hover { background:var(--bg-glass); color:var(--text-primary); border-color:var(--border-dim); }
+    .sv-nav-item.active { background:rgba(0,212,255,0.1); color:var(--accent-cyan); border-color:rgba(0,212,255,0.2); }
+    .sv-nav-icon { font-size:14px; flex-shrink:0; width:18px; text-align:center; }
+    .sv-nav-label { flex:1; overflow:hidden; text-overflow:ellipsis; }
+    .sv-sidenav-footer { padding:8px; border-top:1px solid var(--border-dim); flex-shrink:0; }
+    .sv-sidenav-footer-btn {
+      display:flex; align-items:center; gap:8px; width:100%; padding:7px 10px;
+      background:none; border:1px solid var(--border-dim); border-radius:var(--radius-md);
+      color:var(--text-muted); font-family:var(--font-mono); font-size:10px;
+      cursor:pointer; transition:var(--transition); white-space:nowrap; overflow:hidden; margin-bottom:4px;
+    }
+    .sv-sidenav-footer-btn:hover { color:var(--accent-cyan); border-color:rgba(0,212,255,0.3); }
+    .sv-sidenav-footer-btn.danger:hover { color:#ff6b6b; border-color:rgba(255,107,107,0.3); }
+    .sv-sidenav.collapsed .sv-sidenav-logo-text,.sv-sidenav.collapsed .sv-sidenav-logo-sub,
+    .sv-sidenav.collapsed .sv-sidenav-user-name,.sv-sidenav.collapsed .sv-sidenav-user-role,
+    .sv-sidenav.collapsed .sv-nav-label,.sv-sidenav.collapsed .sv-sidenav-section,
+    .sv-sidenav.collapsed .sv-sidenav-footer-label { display:none; }
+    .sv-sidenav.collapsed .sv-nav-item { justify-content:center; padding:9px; }
+    .sv-sidenav.collapsed .sv-sidenav-user { justify-content:center; }
+    .sv-sidenav.collapsed .sv-sidenav-logo { justify-content:center; padding:18px 0 14px; }
+    .sv-sidenav.collapsed .sv-sidenav-footer-btn { justify-content:center; }
+
+    /* ── Layout raíz — app shell con sidebar izquierda ──── */
+    html, body { height: 100%; overflow: hidden; }
+
+    body { display: flex; flex-direction: column; }
+
+    .sv-dash-shell {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ══════════════════════════════════════════════════════
+       SIDEBAR IZQUIERDA — herramientas del dashboard
+    ══════════════════════════════════════════════════════ */
+    .sv-dash-sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--bg-dark);
+      border-right: 1px solid var(--border-dim);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 100;
+      transition: width 0.28s cubic-bezier(.4,0,.2,1);
+    }
+
+    .sv-dash-sidebar.collapsed {
+      width: 48px;
+    }
+
+    /* Cabecera del sidebar — info del proyecto */
+    .sv-dash-sidebar-header {
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid var(--border-dim);
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .sv-dash-sidebar-title {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      white-space: nowrap;
+    }
+
+    .sv-project-info-mini {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .sv-project-cat-icon {
+      width: 30px; height: 30px;
+      border-radius: var(--radius-md);
+      background: var(--bg-glass);
+      border: 1px solid var(--border-dim);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .sv-project-mini-title {
+      font-family: var(--font-display);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.3;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .sv-project-mini-meta {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: #8ab4c8;
+      margin-top: 2px;
+    }
+
+    /* Colapsar: ocultar textos */
+    .sv-dash-sidebar.collapsed .sv-dash-sidebar-title,
+    .sv-dash-sidebar.collapsed .sv-project-mini-title,
+    .sv-dash-sidebar.collapsed .sv-project-mini-meta,
+    .sv-dash-sidebar.collapsed .sv-tool-label,
+    .sv-dash-sidebar.collapsed .sv-tool-section-title,
+    .sv-dash-sidebar.collapsed .sv-layer-info,
+    .sv-dash-sidebar.collapsed .sv-layer-toggle,
+    .sv-dash-sidebar.collapsed .sv-bbox-stats { display: none; }
+
+    .sv-dash-sidebar.collapsed .sv-project-info-mini { justify-content: center; }
+    .sv-dash-sidebar.collapsed .sv-tool-btn { justify-content: center; padding: 8px 0; }
+    .sv-dash-sidebar.collapsed .sv-layer-item { justify-content: center; }
+
+    /* Scroll body del sidebar */
+    .sv-sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 8px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-dim) transparent;
+    }
+
+    /* Secciones del sidebar */
+    .sv-tool-section-title {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #8bbdd6;            /* más legible que var(--text-muted) */
+      padding: 8px 8px 4px;
+      white-space: nowrap;
+    }
+
+    /* Botones de herramienta */
+    .sv-tool-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 7px 8px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      background: none;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: var(--transition);
+      text-align: left;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .sv-tool-btn:hover {
+      background: var(--bg-glass);
+      border-color: var(--border-dim);
+      color: var(--text-primary);
+    }
+
+    .sv-tool-btn.active {
+      background: rgba(0,212,255,0.1);
+      border-color: rgba(0,212,255,0.25);
+      color: var(--accent-cyan);
+    }
+
+    .sv-tool-btn-icon { font-size: 13px; flex-shrink: 0; width: 18px; text-align: center; }
+    .sv-tool-label    { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Selectores de columna dentro del sidebar */
+    .sv-sidebar-select {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 5px 8px;
+      margin-top: 4px;
+      cursor: pointer;
+    }
+
+    .sv-sidebar-select:focus { outline: none; border-color: var(--accent-cyan); }
+
+    /* Capas dentro del sidebar */
+    .sv-layer-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: var(--transition);
+      border: 1px solid transparent;
+      margin-bottom: 3px;
+    }
+
+    .sv-layer-item:hover {
+      background: var(--bg-glass);
+      border-color: var(--border-dim);
+    }
+
+    .sv-layer-item.selected {
+      background: rgba(0,212,255,0.07);
+      border-color: rgba(0,212,255,0.2);
+    }
+
+    .sv-layer-item.loading { opacity: 0.5; pointer-events: none; }
+
+    .sv-layer-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .sv-layer-info { flex: 1; min-width: 0; }
+
+    .sv-layer-name {
+      font-family: var(--font-display);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .sv-layer-meta {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: #8bbdd6;
+      margin-top: 1px;
+    }
+
+    .sv-layer-toggle {
+      width: 28px; height: 16px;
+      border-radius: 8px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-dim);
+      cursor: pointer;
+      position: relative;
+      flex-shrink: 0;
+      transition: var(--transition);
+    }
+
+    .sv-layer-toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: var(--transition);
+    }
+
+    .sv-layer-toggle.on { border-color: var(--accent-teal); background: rgba(0,184,160,0.2); }
+    .sv-layer-toggle.on::after { left: 14px; background: var(--accent-teal); }
+
+    /* Stats bbox */
+    .sv-dash-sidebar-footer {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border-dim);
+      flex-shrink: 0;
+    }
+
+    .sv-bbox-stats {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: #8bbdd6;
+      letter-spacing: 0.3px;
+      line-height: 1.8;
+    }
+
+    .sv-bbox-stats span { color: var(--accent-cyan); font-weight: 700; }
+
+    /* Botón colapsar sidebar */
+    .sv-sidebar-collapse-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      padding: 8px;
+      background: none;
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-md);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .sv-sidebar-collapse-btn:hover { color: var(--accent-cyan); border-color: rgba(0,212,255,0.3); }
+    .sv-dash-sidebar.collapsed .sv-sidebar-collapse-btn { justify-content: center; }
+    .sv-dash-sidebar.collapsed .sv-sidebar-collapse-label { display: none; }
+
+    /* ══════════════════════════════════════════════════════
+       ÁREA CENTRAL — scroll vertical completo
+    ══════════════════════════════════════════════════════ */
+    .sv-dash-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;    /* scroll para ver las gráficas */
+      overflow-x: hidden;
+      min-width: 0;
+      /* El topbar es sticky dentro de este scroll */
+    }
+
+    /* ── Breadcrumb topbar del mapa ──────────────────────── */
+    .sv-dash-topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-dim);
+      flex-shrink: 0;
+      background: var(--bg-dark);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      height: 44px;
+      box-sizing: border-box;
+    }
+
+    /* ── Layout del área central ────────────────────────── */
+    /* sv-dash-main es la columna scrollable principal       */
+    /* Contiene: topbar (fijo) + zona-mapa + zona-graficas   */
+
+    /* ── Zona del mapa ──────────────────────────────────── */
+    .sv-map-block {
+      flex-shrink: 0;
+      width: 100%;
+      /* min-height garantiza que el mapa nunca sea muy chato */
+      height: calc(100vh - 44px);   /* pantalla - topbar */
+      min-height: 480px;
+      max-height: 85vh;             /* no que ocupe toda la pantalla */
+      position: relative;
+      border-bottom: 2px solid var(--border-dim);
+    }
+
+    /* El mapa Leaflet llena su contenedor */
+    .sv-map-area {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    #sv-map {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Sección de gráficas — debajo del mapa ────────── */
+    .sv-charts-section {
+      flex-shrink: 0;
+      background: var(--bg-dark);
+      border-top: 1px solid var(--border-dim);
+      /* min-height para que siempre sea visible sin scroll */
+      min-height: 200px;
+    }
+
+    /* Leaflet overrides */
+    .leaflet-container {
+      background: var(--bg-deep);
+      font-family: var(--font-ui);
+    }
+
+    .leaflet-control-attribution {
+      background: rgba(6,13,26,0.85) !important;
+      color: var(--text-muted) !important;
+      font-size: 9px !important;
+      border-radius: 4px 0 0 0 !important;
+    }
+
+    .leaflet-control-attribution a { color: var(--accent-cyan) !important; }
+
+    .leaflet-bar {
+      border: 1px solid var(--border-dim) !important;
+      border-radius: var(--radius-md) !important;
+      box-shadow: var(--shadow-card) !important;
+    }
+
+    .leaflet-bar a {
+      background: var(--bg-card) !important;
+      color: var(--text-primary) !important;
+      border-bottom: 1px solid var(--border-dim) !important;
+      width: 30px !important;
+      height: 30px !important;
+      line-height: 30px !important;
+    }
+
+    .leaflet-bar a:hover {
+      background: var(--bg-glass) !important;
+      color: var(--accent-cyan) !important;
+    }
+
+    /* Custom popup */
+    .leaflet-popup-content-wrapper {
+      background: var(--bg-card) !important;
+      border: 1px solid var(--border-dim) !important;
+      border-radius: var(--radius-lg) !important;
+      box-shadow: var(--shadow-card) !important;
+      color: var(--text-primary) !important;
+      max-width: 280px;
+      padding: 0 !important;
+    }
+
+    .leaflet-popup-tip {
+      background: var(--bg-card) !important;
+    }
+
+    .leaflet-popup-content {
+      margin: 0 !important;
+    }
+
+    .sv-popup {
+      padding: 16px;
+    }
+
+    .sv-popup-title {
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-dim);
+    }
+
+    .sv-popup-attr {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 3px 0;
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .sv-popup-key {
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .sv-popup-val {
+      color: var(--text-primary);
+      text-align: right;
+      word-break: break-word;
+    }
+
+    /* Map toolbar overlay */
+    .sv-map-toolbar {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 500;
+      display: flex;
+      gap: 4px;
+      background: rgba(6,13,26,0.88);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-xl);
+      padding: 4px 6px;
+    }
+
+    .sv-map-tool-btn {
+      background: none;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 5px 10px;
+      font-family: var(--font-mono);
+      letter-spacing: 0.5px;
+      transition: var(--transition);
+      white-space: nowrap;
+    }
+
+    .sv-map-tool-btn:hover, .sv-map-tool-btn.active {
+      background: var(--bg-glass);
+      border-color: var(--border-dim);
+      color: var(--accent-cyan);
+    }
+
+    /* Cursor coords */
+    .sv-coord-display {
+      position: absolute;
+      /* Se posiciona desde abajo del área del mapa (no del panel de gráficas)
+         gracias a que sv-map-area ahora es flex y #sv-map es flex:1 */
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 500;
+      background: rgba(6,13,26,0.85);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-md);
+      padding: 4px 12px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      pointer-events: none;
+      letter-spacing: 0.5px;
+    }
+
+    .sv-coord-display span { color: var(--accent-cyan); }
+
+    /* Sidebar toggle button */
+    .sv-sidebar-toggle {
+      position: absolute;
+      top: 50%;
+      left: 300px;
+      transform: translateY(-50%);
+      z-index: 600;
+      background: var(--bg-card);
+      border: 1px solid var(--border-dim);
+      border-left: none;
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 8px 5px;
+      font-size: 12px;
+      transition: var(--transition);
+    }
+
+    .sv-sidebar-toggle:hover {
+      background: var(--bg-glass);
+      color: var(--accent-cyan);
+    }
+
+    .sv-dash-sidebar.collapsed ~ .sv-map-area .sv-sidebar-toggle {
+      left: 0;
+    }
+
+    /* ── Bottom charts panel ────────────────────────────── */
+    .sv-charts-panel {
+      flex-shrink: 0;
+      width: 100%;
+      z-index: 400;
+      background: rgba(6,13,26,0.95);
+      backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border-dim);
+      padding: 0;
+      resize: vertical;
+      overflow: hidden;
+      min-height: 200px;
+      max-height: 80vh;
+      transition: max-height 0.35s cubic-bezier(0.4,0,0.2,1),
+                  min-height 0.35s cubic-bezier(0.4,0,0.2,1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sv-charts-panel.hidden {
+      min-height: 38px;
+      max-height: 38px;
+      resize: none;
+    }
+
+    .sv-charts-panel.hidden .sv-analysis-body { display: none; }
+
+    .sv-analysis-topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      height: 38px;
+      border-bottom: 1px solid var(--border-dim);
+      flex-shrink: 0;
+    }
+
+    .sv-analysis-topbar-title {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .sv-analysis-topbar-sep {
+      width: 1px; height: 14px;
+      background: var(--border-dim);
+      flex-shrink: 0;
+    }
+
+    /* Tabs de tipo de gráfica */
+    .sv-chart-tabs {
+      display: flex;
+      gap: 2px;
+      flex: 1;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .sv-chart-tabs::-webkit-scrollbar { display: none; }
+
+    .sv-chart-tab {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.8px;
+      padding: 3px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .sv-chart-tab:hover {
+      border-color: var(--border-dim);
+      color: var(--text-secondary);
+    }
+
+    .sv-chart-tab.active {
+      border-color: var(--accent-cyan);
+      background: rgba(0,212,255,0.1);
+      color: var(--accent-cyan);
+    }
+
+    .sv-chart-tab.disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    /* Controles de la derecha del topbar */
+    .sv-analysis-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .sv-analysis-select {
+      background: var(--bg-input);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 2px 8px;
+      cursor: pointer;
+      height: 24px;
+    }
+
+    .sv-analysis-select:focus { outline: none; border-color: var(--accent-cyan); }
+
+    /* Body del panel de análisis */
+    .sv-analysis-body {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      min-height: 0;
+    }
+
+    /* Grid de gráficas — se adapta al tipo activo */
+    .sv-charts-viewport {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 12px 16px 12px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-dim) transparent;
+    }
+
+    .sv-charts-grid {
+      display: grid;
+      gap: 12px;
+      height: 100%;
+    }
+
+    /* Layouts de grid según cantidad de gráficas */
+    .sv-charts-grid.layout-1 { grid-template-columns: 1fr; }
+    .sv-charts-grid.layout-2 { grid-template-columns: 1fr 1fr; }
+    .sv-charts-grid.layout-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .sv-charts-grid.layout-4 { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; }
+
+    .sv-chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-lg);
+      padding: 12px 14px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 180px;
+    }
+
+    .sv-chart-card canvas {
+      flex: 1;
+      min-height: 120px;
+    }
+
+    .sv-chart-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+    }
+
+    .sv-chart-title {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: #c8dde8;
+    }
+
+    .sv-chart-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--accent-cyan);
+      padding: 2px 8px;
+      border: 1px solid rgba(0,212,255,0.3);
+      border-radius: var(--radius-sm);
+    }
+
+    /* Estadísticas KPI en fila */
+    .sv-stats-kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 8px;
+      padding: 10px 0;
+    }
+
+    .sv-kpi-card {
+      background: var(--bg-input);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-md);
+      padding: 10px 12px;
+      text-align: center;
+    }
+
+    .sv-kpi-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: #a8c8dc;
+      margin-bottom: 4px;
+    }
+
+    .sv-kpi-value {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+
+    .sv-kpi-unit {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Panel de comparación — selector de dos columnas */
+    .sv-compare-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0 12px;
+      flex-wrap: wrap;
+    }
+
+    .sv-compare-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    /* Empty state del panel */
+    .sv-analysis-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 1px;
+    }
+
+    /* ── Loading overlay ────────────────────────────────── */
+    .sv-dashboard-loading {
+      position: fixed;
+      inset: 0;
+      background: var(--bg-deep);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      transition: opacity 0.5s ease;
+    }
+
+    .sv-dashboard-loading.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .sv-loading-logo {
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 900;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-teal));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 4px;
+    }
+
+    .sv-loading-bar-track {
+      width: 240px;
+      height: 3px;
+      background: var(--bg-card);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .sv-loading-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-teal));
+      border-radius: 2px;
+      animation: loading-fill 1.8s ease-in-out forwards;
+    }
+
+    @keyframes loading-fill {
+      0%   { width: 0%; }
+      60%  { width: 75%; }
+      100% { width: 95%; }
+    }
+
+    .sv-loading-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+    }
+
+    /* ── Empty state ─────────────────────────────────────── */
+    .sv-map-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .sv-map-empty-icon {
+      font-size: 48px;
+      opacity: 0.15;
+    }
+
+    .sv-map-empty-text {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+    }
+
+    /* ── Responsive ─────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .sv-dash-sidebar { position: absolute; top: 0; bottom: 0; left: 0; z-index: 100; }
+      .sv-dash-sidebar.collapsed { transform: translateX(-100%); width: 300px; }
+      .sv-charts-grid { grid-template-columns: 1fr; height: auto; min-height: unset; }
+      .sv-charts-panel { max-height: 70vh; }
+      .sv-map-toolbar { top: 4px; font-size: 10px; }
+    }
+
+    /* No-border leaflet scale */
+    .leaflet-control-scale-line {
+      background: rgba(6,13,26,0.8) !important;
+      border: 1px solid var(--border-dim) !important;
+      border-top: none !important;
+      color: var(--text-muted) !important;
+      font-family: var(--font-mono) !important;
+      font-size: 9px !important;
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading screen -->
+  <div class="sv-dashboard-loading" id="sv-loading-screen">
+    <div class="sv-loading-logo">SIVAG</div>
+    <div class="sv-loading-bar-track"><div class="sv-loading-bar-fill"></div></div>
+    <div class="sv-loading-label" id="sv-loading-label">Cargando dashboard...</div>
+  </div>
+
+  <div class="sv-bg-orb sv-bg-orb-1" style="position:fixed;z-index:-1;"></div>
+  <div class="sv-bg-orb sv-bg-orb-2" style="position:fixed;z-index:-1;"></div>
+
+  <!-- ═══ SHELL ══════════════════════════════════════════════════════ -->
+  <div class="sv-dash-shell">
+
+    <!-- ══ SIDENAV DE NAVEGACIÓN ══ -->
+    <aside class="sv-sidenav" id="sv-sidenav">
+      <a href="panel.html" class="sv-sidenav-logo">
+        <div class="sv-sidenav-logo-mark">S</div>
+        <div>
+          <div class="sv-sidenav-logo-text">SIVAG</div>
+          <div class="sv-sidenav-logo-sub">Geoespacial</div>
+        </div>
+      </a>
+      <div class="sv-sidenav-user">
+        <div class="sv-sidenav-avatar" id="sv-nav-avatar">Y</div>
+        <div style="overflow:hidden;">
+          <div class="sv-sidenav-user-name" id="sv-nav-nombre">Usuario</div>
+          <div class="sv-sidenav-user-role" id="sv-nav-rol">Investigador</div>
+        </div>
+      </div>
+      <nav class="sv-sidenav-nav">
+        <div class="sv-sidenav-section">Principal</div>
+        <a href="panel.html" class="sv-nav-item">
+          <span class="sv-nav-icon">◈</span><span class="sv-nav-label">Panel principal</span>
+        </a>
+        <a href="explorador.html" class="sv-nav-item">
+          <span class="sv-nav-icon">🌐</span><span class="sv-nav-label">Explorador</span>
+        </a>
+        <div class="sv-sidenav-section" style="margin-top:6px;">Cuenta</div>
+        <a href="#" class="sv-nav-item">
+          <span class="sv-nav-icon">👤</span><span class="sv-nav-label">Mi perfil</span>
+        </a>
+        <a href="#" class="sv-nav-item">
+          <span class="sv-nav-icon">⚙</span><span class="sv-nav-label">Ajustes</span>
+        </a>
+      </nav>
+      <div class="sv-sidenav-footer">
+        <button class="sv-sidenav-footer-btn" id="sv-nav-collapse-btn">
+          <span id="sv-nav-collapse-icon">◁</span>
+          <span class="sv-sidenav-footer-label">Colapsar</span>
+        </button>
+        <button class="sv-sidenav-footer-btn danger" id="sv-nav-logout-btn">
+          <span>⎋</span>
+          <span class="sv-sidenav-footer-label">Cerrar sesión</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ═══ PANEL DE HERRAMIENTAS DEL MAPA (no barra de navegación) ═══ -->
+    <aside class="sv-dash-sidebar" id="sv-dash-sidebar">
+
+      <!-- Info del proyecto -->
+      <div class="sv-dash-sidebar-header">
+        <div class="sv-dash-sidebar-title">◈ Proyecto activo</div>
+        <div class="sv-project-info-mini">
+          <div class="sv-project-cat-icon" id="sv-sidebar-cat-icon">🗺️</div>
+          <div style="overflow:hidden;">
+            <div class="sv-project-mini-title" id="sv-sidebar-titulo">—</div>
+            <div class="sv-project-mini-meta" id="sv-sidebar-meta">— capas</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cuerpo scrollable del panel de herramientas -->
+      <div class="sv-sidebar-scroll">
+
+        <!-- Análisis / tipo de gráfica -->
+        <div class="sv-tool-section-title">Análisis</div>
+        <button class="sv-tool-btn active" data-mode="resumen">
+          <span class="sv-tool-btn-icon">◈</span><span class="sv-tool-label">Resumen</span>
+        </button>
+        <button class="sv-tool-btn" data-mode="distribucion">
+          <span class="sv-tool-btn-icon">▦</span><span class="sv-tool-label">Distribución</span>
+        </button>
+        <button class="sv-tool-btn" data-mode="correlacion">
+          <span class="sv-tool-btn-icon">⊹</span><span class="sv-tool-label">Correlación</span>
+        </button>
+        <button class="sv-tool-btn" data-mode="temporal" id="sb-mode-temporal">
+          <span class="sv-tool-btn-icon">📅</span><span class="sv-tool-label">Temporal</span>
+        </button>
+        <button class="sv-tool-btn" data-mode="comparar">
+          <span class="sv-tool-btn-icon">⇄</span><span class="sv-tool-label">Comparar</span>
+        </button>
+
+        <!-- Columna X — selector de atributo para análisis -->
+        <div class="sv-tool-section-title" style="margin-top:10px;">Columna de análisis</div>
+        <select id="sv-chart-attr-select" class="sv-sidebar-select">
+          <option value="">— Columna —</option>
+        </select>
+
+        <!-- Selector de columna de FECHA — solo visible en modo Temporal -->
+        <div id="sb-fecha-wrap" style="display:none;">
+          <div class="sv-tool-section-title" style="margin-top:8px;color:#ffb700;">Columna de fecha</div>
+          <select id="sv-fecha-col-select" class="sv-sidebar-select" title="Columna con valores de fecha">
+            <option value="">— Columna de fecha —</option>
+          </select>
+        </div>
+
+        <!-- Columna Y para Comparar / Correlación -->
+        <div id="sb-col-y-wrap" style="display:none;">
+          <select id="sv-chart-attr-y" class="sv-sidebar-select" style="margin-top:6px;">
+            <option value="">— Col. Y —</option>
+          </select>
+        </div>
+
+        <!-- Mapa base -->
+        <div class="sv-tool-section-title" style="margin-top:12px;">Mapa base</div>
+        <button class="sv-tool-btn active" data-basemap="osm">
+          <span class="sv-tool-btn-icon">🗺</span><span class="sv-tool-label">OpenStreetMap</span>
+        </button>
+        <button class="sv-tool-btn" data-basemap="sat">
+          <span class="sv-tool-btn-icon">🛰</span><span class="sv-tool-label">Satelital</span>
+        </button>
+        <button class="sv-tool-btn" data-basemap="topo">
+          <span class="sv-tool-btn-icon">⛰</span><span class="sv-tool-label">Topográfico</span>
+        </button>
+
+        <!-- Etiquetas en el mapa -->
+        <div class="sv-tool-section-title" style="margin-top:12px;">Etiquetas en mapa</div>
+        <select id="sv-label-col" class="sv-sidebar-select" title="Columna para etiquetar puntos">
+          <option value="">— Sin etiquetas —</option>
+        </select>
+
+        <!-- Clasificar puntos por color -->
+        <div class="sv-tool-section-title" style="margin-top:12px;">Clasificar por color</div>
+        <select id="sv-classify-col" class="sv-sidebar-select" title="Columna para clasificar por color">
+          <option value="">— Sin clasificación —</option>
+        </select>
+
+        <!-- Panel de rangos (solo cuando la columna es numérica con pocos repetidos) -->
+        <div id="sv-classify-range-wrap" style="display:none;margin-top:8px;padding:8px;background:var(--bg-input);border:1px solid var(--border-dim);border-radius:var(--radius-md);">
+          <div style="font-family:var(--font-mono);font-size:9px;color:#fff;margin-bottom:6px;letter-spacing:0.5px;">
+            Definir rangos manuales
+          </div>
+          <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px;">
+            <input type="number" id="sv-range-min" class="sv-sidebar-select" placeholder="Mín" style="width:60px;padding:3px 6px;" />
+            <span style="color:var(--text-muted);font-size:10px;">a</span>
+            <input type="number" id="sv-range-max" class="sv-sidebar-select" placeholder="Máx" style="width:60px;padding:3px 6px;" />
+          </div>
+          <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px;">
+            <label style="font-family:var(--font-mono);font-size:9px;color:#fff;">Clases:</label>
+            <input type="number" id="sv-range-classes" class="sv-sidebar-select" value="5" min="2" max="10" style="width:50px;padding:3px 6px;" />
+          </div>
+          <button class="sv-tool-btn" id="sv-apply-range-btn" style="margin:0;font-size:9px;padding:5px 8px;">
+            <span class="sv-tool-btn-icon">▶</span><span class="sv-tool-label">Aplicar rangos</span>
+          </button>
+        </div>
+
+        <!-- Leyenda de clasificación -->
+        <div id="sv-classify-legend" style="display:none;margin-top:6px;"></div>
+
+        <!-- Herramientas del mapa -->
+        <div class="sv-tool-section-title" style="margin-top:12px;">Herramientas</div>
+        <button class="sv-tool-btn" id="btn-fit-bounds">
+          <span class="sv-tool-btn-icon">⊞</span><span class="sv-tool-label">Ajustar vista</span>
+        </button>
+
+        <!-- Capas -->
+        <div class="sv-tool-section-title" style="margin-top:12px;">Capas del proyecto</div>
+        <div id="sv-layers-list">
+          <div style="padding:8px 4px;font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">
+            Cargando...
+          </div>
+        </div>
+
+      </div><!-- /sv-sidebar-scroll -->
+
+      <!-- Footer: stats bbox + colapsar -->
+      <div class="sv-dash-sidebar-footer">
+        <div class="sv-bbox-stats" id="sv-bbox-stats">Mueve el mapa para ver estadísticas</div>
+        <button class="sv-sidebar-collapse-btn" id="sv-sidebar-toggle">
+          <span style="font-size:12px;" id="sv-sidebar-toggle-icon">◁</span>
+          <span class="sv-sidebar-collapse-label">Colapsar panel</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ═══ CONTENIDO PRINCIPAL ═══════════════════════════════════════ -->
+    <div class="sv-dash-main" id="sv-dash-main">
+
+      <!-- Topbar con breadcrumb del proyecto -->
+      <div class="sv-dash-topbar">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+          <span style="color:var(--text-muted);font-size:12px;">◈</span>
+          <div style="min-width:0;">
+            <div id="sv-nav-proyecto-titulo"
+              style="font-family:var(--font-display);font-size:13px;font-weight:700;
+                     color:var(--text-primary);white-space:nowrap;overflow:hidden;
+                     text-overflow:ellipsis;max-width:400px;">
+              Cargando proyecto...
+            </div>
+            <div id="sv-nav-proyecto-meta"
+              style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);letter-spacing:0.5px;">
+              &nbsp;
+            </div>
+          </div>
+        </div>
+        <!-- Feature count -->
+        <span id="sv-chart-feature-count"
+          style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--accent-teal);flex-shrink:0;">
+        </span>
+      </div>
+
+      <!-- BLOQUE DEL MAPA — altura fija, no scrollable -->
+      <div class="sv-map-block">
+        <div class="sv-map-area">
+          <div id="sv-map"></div>
+
+          <!-- Coordenadas del cursor -->
+          <div class="sv-coord-display" id="sv-coord-display">
+            Lat <span id="sv-coord-lat">—</span> &nbsp;Lon <span id="sv-coord-lng">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECCIÓN DE GRÁFICAS — debajo del mapa, parte del scroll -->
+      <div class="sv-charts-panel sv-charts-section" id="sv-charts-panel">
+
+        <!-- Barra superior: título + tabs de modo + controles -->
+        <div class="sv-analysis-topbar">
+          <div class="sv-analysis-topbar-title">
+            📊 <span id="sv-chart-feature-count" style="color:var(--accent-teal);">— feat.</span>
+          </div>
+          <div class="sv-analysis-topbar-sep"></div>
+
+          <!-- Tabs dinámicas — se renderizan por JS según columnas disponibles -->
+          <div class="sv-chart-tabs" id="sv-chart-tabs">
+            <button class="sv-chart-tab active" data-mode="resumen">Resumen</button>
+            <button class="sv-chart-tab" data-mode="distribucion">Distribución</button>
+            <button class="sv-chart-tab" data-mode="correlacion">Correlación</button>
+            <button class="sv-chart-tab" data-mode="temporal">Temporal</button>
+            <button class="sv-chart-tab" data-mode="comparar">Comparar</button>
+          </div>
+
+          <div class="sv-analysis-controls">
+            <!-- Selector de columna principal -->
+            <select id="sv-chart-attr-select" class="sv-analysis-select"
+              title="Columna principal para análisis">
+              <option value="">— Columna —</option>
+            </select>
+            <!-- Selector de columna secundaria (solo en modo Comparar) -->
+            <select id="sv-chart-attr-y" class="sv-analysis-select"
+              title="Columna Y (comparación)" style="display:none;">
+              <option value="">— Col. Y —</option>
+            </select>
+            <button class="sv-charts-panel-toggle" id="sv-charts-collapse-btn"
+              title="Expandir/colapsar panel">▼</button>
+          </div>
+        </div>
+
+        <!-- Cuerpo del panel -->
+        <div class="sv-analysis-body">
+          <div class="sv-charts-viewport">
+            <div class="sv-charts-grid layout-2" id="sv-charts-grid">
+              <!-- contenido generado por JS -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div><!-- /sv-dash-main -->
+  </div><!-- /sv-dash-shell -->
+
+  <script type="module">
+    import { showAlert }     from './js/ui.js';
+    import { Auth }          from './js/auth.js';
+    import { API }           from './js/api.js';
+
+
+    // ── Sidenav de navegación ──────────────────────────────────
+    (function() {
+      const user   = JSON.parse(localStorage.getItem('sivag_user') || '{}');
+      const nombre = user.nombre_completo || user.username || 'Usuario';
+      const rol    = user.rol === 'ADMIN' ? 'Administrador' : 'Investigador';
+      const avatar = nombre.charAt(0).toUpperCase();
+      const el = (id) => document.getElementById(id);
+      if (el('sv-nav-nombre')) el('sv-nav-nombre').textContent = nombre;
+      if (el('sv-nav-rol'))    el('sv-nav-rol').textContent    = rol;
+      if (el('sv-nav-avatar')) el('sv-nav-avatar').textContent = avatar;
+
+      const sidenav = el('sv-sidenav');
+      let collapsed = false;
+      el('sv-nav-collapse-btn')?.addEventListener('click', () => {
+        collapsed = !collapsed;
+        sidenav.classList.toggle('collapsed', collapsed);
+        const ico = el('sv-nav-collapse-icon');
+        if (ico) ico.textContent = collapsed ? '▷' : '◁';
+        setTimeout(() => {
+          // state puede no estar declarado aún — acceder vía window si fue expuesto
+          const s = typeof state !== 'undefined' ? state : null;
+          s?.map?.invalidateSize({ animate:false });
+        }, 300);
+      });
+      el('sv-nav-logout-btn')?.addEventListener('click', () => {
+        ['sivag_access','sivag_refresh','sivag_user'].forEach(k => localStorage.removeItem(k));
+        window.location.href = 'login.html';
+      });
+    })();
+
+    // ─────────────────────────────────────────────────
+    // 0. Inicialización — ruta pública + autenticada
+    // ─────────────────────────────────────────────────
+    // La barra de navegación lateral es el sidenav compartido
+    // El dashboard NO tiene sidenav de navegación — solo el panel de herramientas
+    // (El sidenav de navegación está en las páginas panel.html y explorador.html)
+
+    const params      = new URLSearchParams(window.location.search);
+    const proyectoId  = params.get('proyecto');
+    const capaIdParam = params.get('capa');       // deep-link a capa específica
+    const isAuth      = Auth.isAuthenticated();
+
+    if (!proyectoId && !capaIdParam) {
+      setLoadingLabel('Proyecto no especificado — redirigiendo...');
+      setTimeout(() => window.location.replace('explorador.html'), 1800);
+    }
+
+    // ─────────────────────────────────────────────────
+    // 1. Paleta de colores para capas
+    // ─────────────────────────────────────────────────
+    const LAYER_PALETTE = [
+      '#00d4ff', '#00e5aa', '#1a6fff', '#ffb700', '#ff6b6b',
+      '#c792ea', '#f78c6c', '#80cbc4', '#89ddff', '#f07178',
+    ];
+
+    let paletteIdx = 0;
+    const nextColor = () => LAYER_PALETTE[paletteIdx++ % LAYER_PALETTE.length];
+
+    // ─────────────────────────────────────────────────
+    // 2. Estado del dashboard
+    // ─────────────────────────────────────────────────
+    const state = {
+      proyecto:      null,
+      capas:         [],
+      selectedLayer: null,
+      barChart:      null,
+      lineChart:     null,
+      map:           null,
+      basemaps:      {},
+      activeBasemap: 'osm',
+      labelGroup:    null,   // LayerGroup de etiquetas DivIcon
+    };
+
+    // ─────────────────────────────────────────────────
+    // 3. Inicializar mapa Leaflet
+    // ─────────────────────────────────────────────────
+    function initMap() {
+      const map = L.map('sv-map', {
+        center: [23.5, -102.0],
+        zoom: 5,
+        zoomControl: false,
+        attributionControl: true,
+      });
+
+      // Zoom control custom position
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+      L.control.scale({ position: 'bottomleft', metric: true, imperial: false }).addTo(map);
+
+      // Fullscreen
+      if (L.control.fullscreen) {
+        L.control.fullscreen({ position: 'bottomright', title: 'Pantalla completa' }).addTo(map);
+      }
+
+      // Base maps
+      const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap',
+        maxZoom: 19,
+      });
+
+      const sat = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '© Esri World Imagery',
+        maxZoom: 19,
+      });
+
+      const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenTopoMap',
+        maxZoom: 17,
+      });
+
+      state.basemaps = { osm, sat, topo };
+      osm.addTo(map);
+      state.activeBasemap = 'osm';
+
+      // LayerGroup dedicado a las etiquetas de texto
+      state.labelGroup = L.layerGroup().addTo(map);
+
+      // Cursor coordinates
+      map.on('mousemove', (e) => {
+        document.getElementById('sv-coord-lat').textContent = e.latlng.lat.toFixed(5);
+        document.getElementById('sv-coord-lng').textContent = e.latlng.lng.toFixed(5);
+      });
+
+      // Sync charts on map move/zoom
+      map.on('moveend zoomend', () => {
+        updateBboxStats();
+        updateChartsFromBbox();
+      });
+
+      state.map = map;
+      return map;
+    }
+
+    // ─────────────────────────────────────────────────
+    // 4. Cargar proyecto y capas
+    // ─────────────────────────────────────────────────
+    async function loadDashboard() {
+      setLoadingLabel('Cargando metadatos del proyecto...');
+
+      try {
+        // Determinar qué endpoint usar
+        let proyecto;
+        let capasInfo = [];
+
+        if (proyectoId) {
+          // Cargar proyecto completo (auth o público)
+          const endpoint = `/api/proyectos/${proyectoId}/`;
+          proyecto = await API.get(endpoint);
+          capasInfo = proyecto.capas_publicas || proyecto.capas || [];
+        } else if (capaIdParam) {
+          // Deep-link: obtener estado de la capa y su proyecto
+          const estadoCapa = await API.get(`/api/capas/${capaIdParam}/estado/`);
+          capasInfo = [estadoCapa];
+          proyecto = { titulo: 'Vista de capa', categoria: 'OTRO', capas_aprobadas: 1 };
+        }
+
+        state.proyecto = proyecto;
+        renderProjectInfo(proyecto);
+        setLoadingLabel('Inicializando mapa...');
+
+        const map = initMap();
+
+        // Filtrar capas aprobadas — vectoriales Y raster
+        const capasDisponibles = capasInfo.filter(c => {
+          const estado = c.estado || c.estado_validacion;
+          return estado === 'APROBADO' || c.tiene_geojson || c.tiene_raster;
+        });
+
+        if (!capasDisponibles.length) {
+          setLoadingLabel('Sin capas disponibles en este proyecto');
+          renderLayersList([]);
+          hideLoading();
+          return;
+        }
+
+        setLoadingLabel(`Cargando ${capasDisponibles.length} capa(s) geoespaciales...`);
+
+        // Cargar capas en paralelo (vector y raster)
+        await Promise.allSettled(
+          capasDisponibles.map(c => loadCapa(c, map))
+        );
+
+        // Ajustar vista y mostrar gráficas generales inmediatamente
+        fitAllLayers(map);
+        updateAttributeSelector();
+        updateBboxStats();
+        // Gráficas se muestran automáticamente al abrir — resumen general
+        setTimeout(() => {
+          updateChartsFromBbox();
+          rebuildLayerStyles(); // aplicar estilos iniciales
+        }, 300);
+
+        hideLoading();
+
+      } catch (err) {
+        console.error('Dashboard load error:', err);
+        setLoadingLabel('Error al cargar el dashboard — ' + (err.message || 'verifica la conexión'));
+        setTimeout(hideLoading, 3000);
+      }
+    }
+
+    // ─────────────────────────────────────────────────
+    // 5a. Dispatcher: detecta vector vs raster y delega
+    // ─────────────────────────────────────────────────
+    async function loadCapa(capaInfo, map) {
+      const capaId   = capaInfo.id || capaInfo.capa_id;
+      const color    = nextColor();
+      const esRaster = capaInfo.tipo_geometria === 'RASTER'
+                    || capaInfo.tipo_archivo    === 'GEOTIFF'
+                    || capaInfo.tiene_raster    === true;
+
+      const capaState = {
+        id:           capaId,
+        nombre:       capaInfo.nombre || `Capa ${capaId.slice(0,8)}`,
+        tipo_geom:    capaInfo.tipo_geometria || (esRaster ? 'RASTER' : ''),
+        tipo_archivo: capaInfo.tipo_archivo || '',
+        num_features: capaInfo.num_features || 0,
+        es_raster:    esRaster,
+        color,
+        visible:      true,
+        geojson:      null,
+        leafletLayer: null,
+        raster_meta:  null,
+      };
+
+      state.capas.push(capaState);
+      renderLayersList(state.capas);
+
+      try {
+        if (esRaster) {
+          await loadCapaRaster(capaId, capaState, map);
+        } else {
+          await loadCapaVector(capaId, capaState, map);
+        }
+        renderLayersList(state.capas);
+      } catch (err) {
+        console.warn(`Error cargando capa ${capaId}:`, err);
+        capaState.error = err.message;
+        renderLayersList(state.capas);
+      }
+    }
+
+    // ─────────────────────────────────────────────────
+    // 5b. Cargar capa vectorial (GeoJSON)
+    // ─────────────────────────────────────────────────
+    async function loadCapaVector(capaId, capaState, map) {
+      const response = await fetch(
+        `http://localhost:8001/api/capas/${capaId}/geojson/`,
+        {
+          headers: isAuth
+            ? { 'Authorization': `Bearer ${localStorage.getItem('sivag_access')}` }
+            : {},
+        }
+      );
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const geojson = await response.json();
+      capaState.geojson = geojson;
+
+      const leafletLayer = buildLeafletLayer(geojson, capaState);
+      capaState.leafletLayer = leafletLayer;
+      leafletLayer.addTo(map);
+    }
+
+    // ─────────────────────────────────────────────────
+    // 5c. Cargar capa raster GeoTIFF nativo
+    //     Usa georaster-layer-for-leaflet — el .tiff se
+    //     renderiza directamente sin convertir a GeoJSON,
+    //     preservando toda la información espectral.
+    // ─────────────────────────────────────────────────
+    async function loadCapaRaster(capaId, capaState, map) {
+      // El backend sirve el raster desde /api/capas/<id>/raster/
+      // (endpoint que debes agregar — ver nota abajo)
+      const rasterUrl = `http://localhost:8001/api/capas/${capaId}/raster/`;
+
+      const authHeaders = isAuth
+        ? { 'Authorization': `Bearer ${localStorage.getItem('sivag_access')}` }
+        : {};
+
+      // Fetch como ArrayBuffer (binario)
+      const response = await fetch(rasterUrl, { headers: authHeaders });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const arrayBuffer = await response.arrayBuffer();
+
+      // Parsear con georaster
+      const georaster = await parseGeoraster(arrayBuffer);
+
+      capaState.raster_meta = {
+        noDataValue: georaster.noDataValue,
+        mins:        georaster.mins,
+        maxs:        georaster.maxs,
+        pixelWidth:  georaster.pixelWidth,
+        pixelHeight: georaster.pixelHeight,
+        projection:  georaster.projection,
+        width:       georaster.width,
+        height:      georaster.height,
+        numberOfRasters: georaster.numberOfRasters,
+      };
+
+      // Determinar colorización según número de bandas
+      const numBandas = georaster.numberOfRasters;
+
+      let pixelValuesToColorFn;
+
+      if (numBandas >= 3) {
+        // RGB — usar bandas 0,1,2 directamente
+        pixelValuesToColorFn = (values) => {
+          const [r, g, b] = values;
+          if (r === georaster.noDataValue) return null;
+          return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+        };
+      } else {
+        // Single band — colormap escala de grises con tinte cian
+        const min = georaster.mins[0] ?? 0;
+        const max = georaster.maxs[0] ?? 255;
+        const range = max - min || 1;
+
+        pixelValuesToColorFn = (values) => {
+          const v = values[0];
+          if (v === georaster.noDataValue || v == null) return null;
+          const t = Math.max(0, Math.min(1, (v - min) / range));
+          // Gradiente dark-space: negro → cyan
+          const r = Math.round(t * 0);
+          const g = Math.round(t * 212);
+          const b = Math.round(t * 255);
+          return `rgba(${r},${g},${b},${0.5 + t * 0.45})`;
+        };
+      }
+
+      const rasterLayer = new GeoRasterLayer({
+        georaster,
+        opacity:              0.85,
+        pixelValuesToColorFn,
+        resolution:           256,   // tiles internos
+        attribution:          `© ${capaState.nombre}`,
+      });
+
+      capaState.leafletLayer = rasterLayer;
+      rasterLayer.addTo(map);
+
+      // Actualizar metadatos en sidebar
+      capaState.num_features = numBandas;
+      capaState.tipo_geom    = `RASTER · ${numBandas} banda${numBandas > 1 ? 's' : ''}`;
+    }
+
+    // ─────────────────────────────────────────────────
+    // 6. Construir capa Leaflet con estilos y popups
+    // ─────────────────────────────────────────────────
+    function buildLeafletLayer(geojson, capaState) {
+      const color = capaState.color;
+
+      return L.geoJSON(geojson, {
+        style: (feature) => ({
+          color,
+          weight: 2,
+          opacity: 0.9,
+          fillColor: color,
+          fillOpacity: 0.2,
+        }),
+
+        pointToLayer: (feature, latlng) => {
+          return L.circleMarker(latlng, {
+            radius: 6,
+            fillColor: color,
+            color: '#fff',
+            weight: 1.5,
+            opacity: 1,
+            fillOpacity: 0.85,
+          });
+        },
+
+        onEachFeature: (feature, layer) => {
+          // Hover highlight
+          layer.on('mouseover', function() {
+            if (this.setStyle) {
+              this.setStyle({ weight: 3, fillOpacity: 0.4 });
+            }
+          });
+
+          layer.on('mouseout', function() {
+            if (this.setStyle) {
+              this.setStyle({ weight: 2, fillOpacity: 0.2 });
+            }
+          });
+
+          // Popup con atributos
+          layer.on('click', function(e) {
+            const props = feature.properties || {};
+            const entries = Object.entries(props).slice(0, 12);
+
+            if (!entries.length) return;
+
+            const rows = entries.map(([k, v]) =>
+              `<div class="sv-popup-attr">
+                <span class="sv-popup-key">${k}</span>
+                <span class="sv-popup-val">${v ?? '—'}</span>
+              </div>`
+            ).join('');
+
+            const content = `
+              <div class="sv-popup">
+                <div class="sv-popup-title">◈ ${capaState.nombre}</div>
+                ${rows}
+                ${entries.length < Object.keys(props).length
+                  ? `<div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-top:6px;">
+                      + ${Object.keys(props).length - 12} atributos más
+                    </div>` : ''}
+              </div>
+            `;
+
+            L.popup({ maxWidth: 280, className: 'sv-leaflet-popup' })
+              .setLatLng(e.latlng)
+              .setContent(content)
+              .openOn(state.map);
+
+            // Seleccionar esta capa para gráficas
+            selectLayer(capaState.id);
+          });
+        },
+      });
+    }
+
+    // ─────────────────────────────────────────────────
+    // 7. Render sidebar de capas
+    // ─────────────────────────────────────────────────
+    function renderLayersList(capas) {
+      const list = document.getElementById('sv-layers-list');
+
+      if (!capas.length) {
+        list.innerHTML = `
+          <div style="padding:24px 16px;text-align:center;">
+            <div style="font-size:28px;opacity:0.2;margin-bottom:8px;">🗂️</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">
+              Sin capas disponibles
+            </div>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = capas.map(c => {
+        const isSelected = state.selectedLayer === c.id;
+        const hasError   = !!c.error;
+        const isLoading  = !c.leafletLayer && !c.error;
+
+        const rasterIcon  = c.es_raster ? '🛰️' : '';
+        const dotOrIcon   = c.es_raster
+          ? `<span style="font-size:16px;flex-shrink:0;">${rasterIcon}</span>`
+          : `<div class="sv-layer-dot" style="background:${c.color};box-shadow:0 0 6px ${c.color}40;"></div>`;
+
+        return `
+          <div class="sv-layer-item ${isSelected ? 'selected' : ''} ${isLoading ? 'loading' : ''}"
+               data-capa-id="${c.id}">
+            ${dotOrIcon}
+            <div class="sv-layer-info">
+              <div class="sv-layer-name">${c.nombre}</div>
+              <div class="sv-layer-meta">
+                ${hasError
+                  ? `<span style="color:var(--accent-red);">Error: ${c.error}</span>`
+                  : isLoading
+                    ? 'Cargando...'
+                    : c.es_raster
+                      ? `${c.tipo_geom || 'GeoTIFF'}`
+                      : `${c.num_features?.toLocaleString() || '?'} features · ${c.tipo_geom || '?'}`
+                }
+              </div>
+            </div>
+            ${!hasError && !isLoading ? `
+              <div class="sv-layer-toggle ${c.visible ? 'on' : ''}"
+                   data-toggle-id="${c.id}"
+                   title="${c.visible ? 'Ocultar capa' : 'Mostrar capa'}">
+              </div>` : ''}
+          </div>`;
+      }).join('');
+
+      // Click en capa → seleccionar para gráficas
+      list.querySelectorAll('.sv-layer-item[data-capa-id]').forEach(el => {
+        el.addEventListener('click', (e) => {
+          if (e.target.closest('[data-toggle-id]')) return;
+          const id = el.dataset.capaId;
+          selectLayer(id);
+
+          // Zoom a esa capa
+          const capa = state.capas.find(c => c.id === id);
+          if (capa?.leafletLayer) {
+            try {
+              state.map.fitBounds(capa.leafletLayer.getBounds(), { padding: [40, 40] });
+            } catch {}
+          }
+        });
+      });
+
+      // Toggle visibilidad
+      list.querySelectorAll('[data-toggle-id]').forEach(toggle => {
+        toggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id   = toggle.dataset.toggleId;
+          const capa = state.capas.find(c => c.id === id);
+          if (!capa || !capa.leafletLayer) return;
+
+          capa.visible = !capa.visible;
+          if (capa.visible) {
+            capa.leafletLayer.addTo(state.map);
+          } else {
+            state.map.removeLayer(capa.leafletLayer);
+          }
+          renderLayersList(state.capas);
+          updateChartsFromBbox();
+        });
+      });
+    }
+
+    // ─────────────────────────────────────────────────
+    // 8. Seleccionar capa activa para gráficas
+    // ─────────────────────────────────────────────────
+    function selectLayer(id) {
+      state.selectedLayer = id;
+      renderLayersList(state.capas);
+      updateAttributeSelector();
+      updateChartsFromBbox();
+    }
+
+    // ─────────────────────────────────────────────────
+    // 9. Ajustar vista a todas las capas
+    // ─────────────────────────────────────────────────
+    function fitAllLayers(map) {
+      const bounds = [];
+      state.capas.forEach(c => {
+        if (c.leafletLayer) {
+          try {
+            const b = c.leafletLayer.getBounds();
+            if (b.isValid()) bounds.push(b);
+          } catch {}
+        }
+      });
+
+      if (bounds.length) {
+        let combined = bounds[0];
+        bounds.slice(1).forEach(b => { combined = combined.extend(b); });
+        map.fitBounds(combined, { padding: [40, 40] });
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // MOTOR DE ANÁLISIS INTELIGENTE — CSV/Excel
+    // Lee columnas_numericas / categoricas / fechas del
+    // meta del GeoJSON y genera gráficas automáticamente
+    // según el tipo de datos y el modo activo.
+    // ═══════════════════════════════════════════════════
+
+    // ── Estado del motor de análisis ─────────────────────
+    const analysis = {
+      mode:        'resumen',   // resumen | distribucion | correlacion | temporal | comparar
+      colX:        null,        // columna principal
+      colY:        null,        // columna secundaria (comparar/correlacion)
+      fechaCol:    null,        // columna de fecha para modo temporal
+      charts:      [],          // instancias Chart.js activas
+      schema:      null,        // { numericas, categoricas, fechas } del layer activo
+    };
+
+    const CD = {   // chart defaults — colores legibles sobre fondo oscuro
+      grid:    'rgba(255,255,255,0.08)',
+      tick:    '#c8dde8',          // antes 0.55 opacity — ahora blanco-azul claro
+      tooltip: { bg:'#060d1a', title:'#00d4ff', body:'#e0edf5', border:'rgba(0,212,255,0.3)' },
+    };
+
+    // ── Helpers de estadística ────────────────────────────
+    const stat = {
+      vals(features, col) {
+        return features.map(f => f.properties?.[col]).filter(v => v != null && !isNaN(+v)).map(Number);
+      },
+      mean(arr)   { return arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null; },
+      median(arr) {
+        if (!arr.length) return null;
+        const s = [...arr].sort((a,b)=>a-b);
+        const m = Math.floor(s.length/2);
+        return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+      },
+      std(arr) {
+        const m = stat.mean(arr); if (m==null) return null;
+        return Math.sqrt(arr.reduce((s,v)=>s+(v-m)**2,0)/arr.length);
+      },
+      min(arr)  { return arr.length ? Math.min(...arr) : null; },
+      max(arr)  { return arr.length ? Math.max(...arr) : null; },
+      moda(arr) {
+        if (!arr.length) return null;
+        const freq = {}; arr.forEach(v=>{ freq[v]=(freq[v]||0)+1; });
+        return Object.entries(freq).sort((a,b)=>b[1]-a[1])[0]?.[0];
+      },
+      iqr(arr) {
+        const s = [...arr].sort((a,b)=>a-b);
+        const q1 = s[Math.floor(s.length*0.25)];
+        const q3 = s[Math.floor(s.length*0.75)];
+        return { q1, q3, iqr: q3-q1, outliers: s.filter(v=>v<q1-1.5*(q3-q1)||v>q3+1.5*(q3-q1)) };
+      },
+      freqMap(features, col) {
+        const m = {};
+        features.forEach(f => {
+          const v = f.properties?.[col]; if (v==null) return;
+          const k = String(v); m[k]=(m[k]||0)+1;
+        });
+        return m;
+      },
+      fmt(n, dec=2) {
+        if (n==null) return '—';
+        return Number(n).toLocaleString('es-MX', { maximumFractionDigits: dec });
+      },
+    };
+
+    // ── Obtener color del layer activo ────────────────────
+    function layerColor(alpha=1) {
+      const c = state.capas.find(c=>c.id===state.selectedLayer)?.color || '#00d4ff';
+      if (alpha===1) return c;
+      // Convertir hex a rgba
+      const r = parseInt(c.slice(1,3),16), g = parseInt(c.slice(3,5),16), b = parseInt(c.slice(5,7),16);
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+
+    // ── Opciones comunes de Chart.js ──────────────────────
+    function chartOpts(extra={}) {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 250 },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: CD.tooltip.bg,
+            titleColor: CD.tooltip.title,
+            bodyColor: CD.tooltip.body,
+            borderColor: CD.tooltip.border,
+            borderWidth: 1,
+            titleFont: { size: 12, family: 'Space Mono' },
+            bodyFont:  { size: 11, family: 'Space Mono' },
+          },
+          ...extra,
+        },
+        scales: {
+          x: {
+            ticks: { color: CD.tick, font:{ size:11, family:'Space Mono' }, maxRotation:40 },
+            grid:  { color: CD.grid }
+          },
+          y: {
+            ticks: { color: CD.tick, font:{ size:11, family:'Space Mono' } },
+            grid:  { color: CD.grid },
+            beginAtZero: true
+          },
+        },
+      };
+    }
+
+    // ── Destruir todas las gráficas activas ────────────────
+    function destroyCharts() {
+      analysis.charts.forEach(c => { try { c.destroy(); } catch {} });
+      analysis.charts = [];
+    }
+
+    // ── Crear tarjeta canvas ──────────────────────────────
+    function makeCard(title, badge='') {
+      const id  = 'cv-' + Math.random().toString(36).slice(2,8);
+      const div = document.createElement('div');
+      div.className = 'sv-chart-card';
+      div.innerHTML = `
+        <div class="sv-chart-card-header">
+          <span class="sv-chart-title">${title}</span>
+          ${badge ? `<span class="sv-chart-badge">${badge}</span>` : ''}
+        </div>
+        <canvas id="${id}"></canvas>`;
+      return { div, id };
+    }
+
+    // ── Crear tarjeta KPI (stats numéricas) ───────────────
+    function makeKpiCard(title, stats) {
+      const div = document.createElement('div');
+      div.className = 'sv-chart-card';
+      const kpis = stats.map(s => `
+        <div class="sv-kpi-card">
+          <div class="sv-kpi-label">${s.label}</div>
+          <div class="sv-kpi-value" style="color:${s.color||'var(--accent-cyan)'};">${s.value}</div>
+          ${s.unit ? `<div class="sv-kpi-unit">${s.unit}</div>` : ''}
+        </div>`).join('');
+      div.innerHTML = `
+        <div class="sv-chart-card-header">
+          <span class="sv-chart-title">${title}</span>
+        </div>
+        <div class="sv-stats-kpi-row">${kpis}</div>`;
+      return div;
+    }
+
+    // ── Leer schema de columnas del layer activo ──────────
+    function getLayerSchema() {
+      const capa = state.capas.find(c => c.id === state.selectedLayer && c.geojson);
+      if (!capa?.geojson?.features?.length) return null;
+
+      // Leer clasificación del primer feature si viene en _meta
+      // (el validator la guarda en columnas_schema via pipeline)
+      const metaProp = capa.geojson.features[0]?.properties?._sivag_meta;
+      if (metaProp) {
+        try { return JSON.parse(metaProp); } catch {}
+      }
+
+      // Fallback: inferir tipos desde los valores del primer feature
+      const props  = capa.geojson.features[0].properties || {};
+      const schema = { numericas: [], categoricas: [], fechas: [] };
+      Object.entries(props).forEach(([k, v]) => {
+        if (k.startsWith('_')) return;
+        if (v == null) return;
+        if (!isNaN(+v) && String(v).trim() !== '') schema.numericas.push(k);
+        else if (/^\d{4}[-\/]/.test(String(v)))     schema.fechas.push(k);
+        else                                          schema.categoricas.push(k);
+      });
+      return schema;
+    }
+
+    // ── Actualizar selector de columnas ───────────────────
+    function updateAttributeSelector() {
+      const schema = getLayerSchema();
+      analysis.schema = schema;
+
+      const selX      = document.getElementById('sv-chart-attr-select');
+      const selY      = document.getElementById('sv-chart-attr-y');
+      const selLabel  = document.getElementById('sv-label-col');
+      const selClass  = document.getElementById('sv-classify-col');
+
+      if (!schema) {
+        selX.innerHTML = '<option value="">— Sin datos —</option>';
+        return;
+      }
+
+      const allCols    = [...(schema.numericas||[]), ...(schema.categoricas||[]), ...(schema.fechas||[])];
+      const nonGeo     = allCols; // todas excepto lat/lon ya filtradas por getLayerSchema
+      const opts       = allCols.map(k => `<option value="${k}">${k}</option>`).join('');
+      const nonGeoOpts = nonGeo.map(k  => `<option value="${k}">${k}</option>`).join('');
+      const yOpts      = (schema.numericas||[]).map(k => `<option value="${k}">${k}</option>`).join('');
+
+      const selFecha = document.getElementById('sv-fecha-col-select');
+      const fechaOpts = (schema.fechas||[]).map(k => `<option value="${k}">${k}</option>`).join('');
+
+      // En modo Temporal solo mostrar columnas numéricas en el selector principal
+      const optsForMode = (analysis.mode === 'temporal')
+        ? (schema.numericas||[]).map(k => `<option value="${k}">${k}</option>`).join('')
+        : opts;
+
+      selX.innerHTML     = '<option value="">— Columna —</option>' + optsForMode;
+      selY.innerHTML     = '<option value="">— Col. Y —</option>'  + yOpts;
+      selLabel.innerHTML = '<option value="">— Sin etiquetas —</option>' + nonGeoOpts;
+      selClass.innerHTML = '<option value="">— Sin clasificación —</option>' + nonGeoOpts;
+      if (selFecha) selFecha.innerHTML = '<option value="">— Columna de fecha —</option>' + fechaOpts;
+
+      // Auto-seleccionar primera numérica si existe
+      const autoX     = schema.numericas?.[0] || allCols[0] || '';
+      const autoY     = schema.numericas?.[1] || '';
+      const autoFecha = schema.fechas?.[0] || '';
+      if (autoX)     { selX.value = autoX; analysis.colX = autoX; }
+      if (autoY)     { selY.value = autoY; analysis.colY = autoY; }
+      if (autoFecha && selFecha) { selFecha.value = autoFecha; analysis.fechaCol = autoFecha; }
+
+      // Actualizar disponibilidad de tabs según columnas
+      updateTabAvailability(schema);
+    }
+
+    // ── Habilitar/deshabilitar tabs y botones sidebar según datos ─
+    function updateTabAvailability(schema) {
+      if (!schema) return;
+      const hasFechas = (schema.fechas?.length    || 0) > 0;
+      const hasNums   = (schema.numericas?.length  || 0) > 0;
+      const hasCats   = (schema.categoricas?.length|| 0) > 0;
+      const hasMultiN = (schema.numericas?.length  || 0) >= 2;
+
+      // Actualizar tabs del panel y botones del sidebar (ambos usan data-mode)
+      document.querySelectorAll('[data-mode="temporal"]')
+        .forEach(el => el.classList.toggle('disabled', !hasFechas));
+      document.querySelectorAll('[data-mode="correlacion"]')
+        .forEach(el => el.classList.toggle('disabled', !hasMultiN));
+      document.querySelectorAll('[data-mode="distribucion"]')
+        .forEach(el => el.classList.toggle('disabled', !(hasNums || hasCats)));
+
+      // Mostrar/ocultar botón temporal en sidebar según disponibilidad
+      const sbTemporal = document.getElementById('sb-mode-temporal');
+      if (sbTemporal) sbTemporal.style.opacity = hasFechas ? '1' : '0.35';
+
+      const activeTab = document.querySelector('.sv-chart-tab.active, [data-mode].active');
+      if (activeTab?.classList.contains('disabled')) setMode('resumen');
+    }
+
+    // ─────────────────────────────────────────────────
+    // 11. Obtener features visibles en bbox actual
+    // ─────────────────────────────────────────────────
+    function getVisibleFeatures() {
+      if (!state.map) return [];
+      const bounds = state.map.getBounds();
+      const capa   = state.capas.find(c => c.id === state.selectedLayer && c.visible && c.geojson);
+      if (!capa) {
+        const all = [];
+        state.capas.filter(c => c.visible && c.geojson)
+          .forEach(c => (c.geojson.features||[]).forEach(f => all.push(f)));
+        return all.filter(f => isFeatureInBounds(f, bounds));
+      }
+      return (capa.geojson.features||[]).filter(f => isFeatureInBounds(f, bounds));
+    }
+
+    function isFeatureInBounds(feature, bounds) {
+      try {
+        const geom = feature.geometry; if (!geom) return false;
+        let coords = [];
+        if (geom.type==='Point')           coords = [geom.coordinates];
+        else if (geom.type==='LineString') coords = geom.coordinates;
+        else if (geom.type==='Polygon')    coords = geom.coordinates[0]||[];
+        else if (geom.type==='MultiPoint') coords = geom.coordinates;
+        else coords = [geom.coordinates?.[0]?.[0]||[]];
+        return coords.some(([lng,lat]) => lng!=null && lat!=null && bounds.contains([lat,lng]));
+      } catch { return true; }
+    }
+
+    // ─────────────────────────────────────────────────
+    // 12. Dispatcher principal — actualiza gráficas
+    // ─────────────────────────────────────────────────
+    function updateChartsFromBbox() {
+      const features = getVisibleFeatures();
+      document.getElementById('sv-chart-feature-count').textContent =
+        `${features.length.toLocaleString()} feat.`;
+
+      analysis.colX = document.getElementById('sv-chart-attr-select').value;
+      analysis.colY = document.getElementById('sv-chart-attr-y').value;
+
+      const grid = document.getElementById('sv-charts-grid');
+      destroyCharts();
+      grid.innerHTML = '';
+
+      if (!features.length) {
+        grid.innerHTML = '<div class="sv-analysis-empty">⊘ Sin features en el área visible</div>';
+        return;
+      }
+
+      switch (analysis.mode) {
+        case 'resumen':       renderModeResumen(features, grid);       break;
+        case 'distribucion':  renderModeDistribucion(features, grid);  break;
+        case 'correlacion':   renderModeCorrelacion(features, grid);   break;
+        case 'temporal':      renderModeTemporal(features, grid);      break;
+        case 'comparar':      renderModeComparar(features, grid);      break;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // ─────────────────────────────────────────────────
+    // Helper: tarjeta informativa al pie de cada modo
+    // ─────────────────────────────────────────────────
+    function makeInfoCard(icon, titulo, descripcion, items = []) {
+      const div = document.createElement('div');
+      div.style.cssText = `
+        grid-column: 1 / -1;
+        margin-top: 6px;
+        padding: 16px 20px;
+        background: rgba(4, 22, 50, 0.55);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(0, 180, 240, 0.22);
+        border-left: 3px solid rgba(0, 212, 255, 0.7);
+        border-radius: 0 10px 10px 10px;
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+      `;
+
+      const itemsHtml = items.length
+        ? `<ul style="margin:8px 0 0;padding-left:18px;list-style:none;">
+            ${items.map(it => `
+              <li style="
+                font-family:'Space Mono',monospace;
+                font-size:11px;
+                color:#a8cfe0;
+                line-height:1.7;
+                padding:1px 0;
+              ">
+                <span style="color:rgba(0,212,255,0.75);margin-right:6px;">›</span>${it}
+              </li>`).join('')}
+           </ul>`
+        : '';
+
+      div.innerHTML = `
+        <div style="font-size:22px;flex-shrink:0;margin-top:2px;opacity:0.85;">${icon}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="
+            font-family:'Space Grotesk','Exo 2',sans-serif;
+            font-size:13px;
+            font-weight:700;
+            color:#c8e8f8;
+            margin-bottom:5px;
+            letter-spacing:0.3px;
+          ">${titulo}</div>
+          <div style="
+            font-family:'Space Grotesk','Exo 2',sans-serif;
+            font-size:12px;
+            color:#90bdd4;
+            line-height:1.65;
+          ">${descripcion}</div>
+          ${itemsHtml}
+        </div>`;
+      return div;
+    }
+
+    // MODO 1 — RESUMEN
+    // KPIs de todas las columnas numéricas + pie de cats
+    // ═══════════════════════════════════════════════════
+    function renderModeResumen(features, grid) {
+      const schema = analysis.schema || getLayerSchema();
+      if (!schema) return;
+
+      const nums = schema.numericas || [];
+      const cats = schema.categoricas || [];
+      const N    = features.length;
+
+      grid.className = 'sv-charts-grid layout-2';
+
+      // ── KPI de conteo global ────────────────────────
+      const countDiv = document.createElement('div');
+      countDiv.className = 'sv-chart-card';
+      countDiv.innerHTML = `
+        <div class="sv-chart-card-header">
+          <span class="sv-chart-title">Resumen general</span>
+          <span class="sv-chart-badge">${N} features</span>
+        </div>
+        <div class="sv-stats-kpi-row">
+          <div class="sv-kpi-card">
+            <div class="sv-kpi-label">Features</div>
+            <div class="sv-kpi-value">${N.toLocaleString()}</div>
+          </div>
+          <div class="sv-kpi-card">
+            <div class="sv-kpi-label">Cols numéricas</div>
+            <div class="sv-kpi-value" style="color:var(--accent-teal);">${nums.length}</div>
+          </div>
+          <div class="sv-kpi-card">
+            <div class="sv-kpi-label">Cols categóricas</div>
+            <div class="sv-kpi-value" style="color:var(--accent-green);">${cats.length}</div>
+          </div>
+          <div class="sv-kpi-card">
+            <div class="sv-kpi-label">Cols fecha</div>
+            <div class="sv-kpi-value" style="color:#ffb700;">${(schema.fechas||[]).length}</div>
+          </div>
+        </div>`;
+      grid.appendChild(countDiv);
+
+      // ── Por cada columna numérica: mini KPI ──────────
+      nums.forEach(col => {
+        const vals = stat.vals(features, col);
+        if (!vals.length) return;
+        const q = stat.iqr(vals);
+        const kpis = [
+          { label:'Media',    value: stat.fmt(stat.mean(vals)),   color:'var(--accent-cyan)'  },
+          { label:'Mediana',  value: stat.fmt(stat.median(vals)), color:'var(--accent-teal)'  },
+          { label:'Desv. std',value: stat.fmt(stat.std(vals)),    color:'#c792ea'             },
+          { label:'Mín',      value: stat.fmt(stat.min(vals)),    color:'var(--text-secondary)'},
+          { label:'Máx',      value: stat.fmt(stat.max(vals)),    color:'var(--text-secondary)'},
+          { label:'Moda',     value: stat.fmt(stat.moda(vals)),   color:'#ffb700'             },
+        ];
+        grid.appendChild(makeKpiCard(col, kpis));
+      });
+
+      // ── Pie chart para la primera columna categórica ──
+      if (cats.length) {
+        const col     = cats[0];
+        const freqMap = stat.freqMap(features, col);
+        const entries = Object.entries(freqMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
+        if (entries.length) {
+          const { div, id } = makeCard(col, 'categoría');
+          grid.appendChild(div);
+          const PALETTE = ['#00d4ff','#00e5aa','#1a6fff','#ffb700','#ff6b6b','#c792ea','#f78c6c','#80cbc4','#89ddff','#f07178'];
+          const ch = new Chart(document.getElementById(id), {
+            type: 'doughnut',
+            data: {
+              labels:   entries.map(([k])=>k),
+              datasets: [{ data: entries.map(([,v])=>v), backgroundColor: PALETTE, borderWidth:0 }],
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              plugins: {
+                legend: { display: true, position:'right', labels:{ color: CD.tick, font:{size:8,family:'Space Mono'}, boxWidth:10 } },
+                tooltip: { backgroundColor:CD.tooltip.bg, titleColor:CD.tooltip.title, bodyColor:CD.tooltip.body, borderColor:CD.tooltip.border, borderWidth:1 },
+              },
+            },
+          });
+          analysis.charts.push(ch);
+        }
+      }
+
+      // ── Radar de medias de columnas numéricas (si ≥3) ──
+      if (nums.length >= 3) {
+        const colsR   = nums.slice(0, 7);
+        const maxVals = colsR.map(c => stat.max(stat.vals(features,c)) || 1);
+        const means   = colsR.map((c,i) => {
+          const m = stat.mean(stat.vals(features,c)) || 0;
+          return (m / maxVals[i]) * 100;  // normalizar 0-100 para radar
+        });
+        const { div, id } = makeCard('Perfil normalizado de columnas', 'radar');
+        grid.appendChild(div);
+        const ch = new Chart(document.getElementById(id), {
+          type: 'radar',
+          data: {
+            labels: colsR,
+            datasets: [{
+              label: 'Media normalizada (%)',
+              data: means,
+              borderColor: layerColor(),
+              backgroundColor: layerColor(0.15),
+              pointBackgroundColor: layerColor(),
+              borderWidth: 2,
+              pointRadius: 3,
+            }],
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend:{display:false}, tooltip:{backgroundColor:CD.tooltip.bg,titleColor:CD.tooltip.title,bodyColor:CD.tooltip.body} },
+            scales: {
+              r: {
+                ticks: { color:CD.tick, font:{size:8}, backdropColor:'transparent' },
+                grid:  { color: CD.grid },
+                angleLines: { color: CD.grid },
+                pointLabels: { color: CD.tick, font:{size:8,family:'Space Mono'} },
+              },
+            },
+          },
+        });
+        analysis.charts.push(ch);
+      }
+
+      // Tarjeta informativa al pie del resumen
+      grid.appendChild(makeInfoCard(
+        '📊',
+        '¿Qué es el módulo de Resumen?',
+        'El Resumen es el punto de partida del análisis. Calcula automáticamente los estadísticos descriptivos de todas las columnas de tu capa y los presenta de forma visual para que puedas entender la distribución general de tus datos geoespaciales sin configuración previa.',
+        [
+          'Estadísticos clave (media, mediana, moda, desviación estándar, mín, máx) para cada columna numérica.',
+          'Gráfico de donut para ver la proporción de categorías en columnas de texto.',
+          'Radar normalizado para comparar el perfil de todas las columnas numéricas entre sí.',
+          'Útil para detectar valores extremos, identificar la columna más relevante y decidir qué análisis realizar a continuación.',
+        ]
+      ));
+    }
+
+    // ═══════════════════════════════════════════════════
+    // MODO 2 — DISTRIBUCIÓN
+    // Histograma + Boxplot simulado + top-N barras
+    // ═══════════════════════════════════════════════════
+    function renderModeDistribucion(features, grid) {
+      const col    = analysis.colX;
+      const schema = analysis.schema || getLayerSchema();
+      grid.className = 'sv-charts-grid layout-2';
+
+      if (!col) {
+        grid.innerHTML = '<div class="sv-analysis-empty">Selecciona una columna</div>';
+        return;
+      }
+
+      const isNum = schema?.numericas?.includes(col);
+      const isCat = !isNum;
+
+      if (isNum) {
+        const vals = stat.vals(features, col);
+        if (!vals.length) return;
+
+        // ── Histograma de 15 bins ────────────────────
+        const mn = stat.min(vals), mx = stat.max(vals);
+        const BINS = 15;
+        const binW = (mx - mn) / BINS || 1;
+        const bins = Array.from({length:BINS}, (_,i) => ({
+          label: stat.fmt(mn + i*binW, 1),
+          count: 0,
+        }));
+        vals.forEach(v => {
+          const idx = Math.min(Math.floor((v-mn)/binW), BINS-1);
+          bins[idx].count++;
+        });
+        const { div: d1, id: id1 } = makeCard(`Histograma · ${col}`, `${vals.length} vals.`);
+        grid.appendChild(d1);
+        const ch1 = new Chart(document.getElementById(id1), {
+          type: 'bar',
+          data: {
+            labels: bins.map(b=>b.label),
+            datasets: [{
+              data:            bins.map(b=>b.count),
+              backgroundColor: layerColor(0.6),
+              borderColor:     layerColor(),
+              borderWidth: 1, borderRadius: 2,
+            }],
+          },
+          options: {
+            ...chartOpts(),
+            plugins: { ...chartOpts().plugins, annotation: undefined },
+          },
+        });
+        analysis.charts.push(ch1);
+
+        // ── Boxplot simulado con barra + marcadores ──
+        const q = stat.iqr(vals);
+        const med = stat.median(vals);
+        const { div: d2, id: id2 } = makeCard(`Cuartiles · ${col}`, 'boxplot');
+        grid.appendChild(d2);
+        const ch2 = new Chart(document.getElementById(id2), {
+          type: 'bar',
+          data: {
+            labels: ['Q1','Mediana','Q3','Mín','Máx','Media'],
+            datasets: [{
+              label: col,
+              data:  [q.q1, med, q.q3, stat.min(vals), stat.max(vals), stat.mean(vals)],
+              backgroundColor: [
+                layerColor(0.5), layerColor(0.9), layerColor(0.5),
+                'rgba(255,183,0,0.5)', 'rgba(255,107,107,0.5)', 'rgba(199,146,234,0.5)',
+              ],
+              borderColor: [layerColor(), layerColor(), layerColor(), '#ffb700','#ff6b6b','#c792ea'],
+              borderWidth:1, borderRadius:3,
+            }],
+          },
+          options: chartOpts(),
+        });
+        analysis.charts.push(ch2);
+
+        // ── KPIs de la columna ───────────────────────
+        grid.appendChild(makeKpiCard(`Estadísticas · ${col}`, [
+          { label:'Media',    value: stat.fmt(stat.mean(vals)),    color:'var(--accent-cyan)' },
+          { label:'Mediana',  value: stat.fmt(med),                color:'var(--accent-teal)' },
+          { label:'Moda',     value: stat.fmt(stat.moda(vals)),    color:'#ffb700'            },
+          { label:'Desv. std',value: stat.fmt(stat.std(vals)),     color:'#c792ea'            },
+          { label:'IQR',      value: stat.fmt(q.iqr),              color:'var(--accent-green)'},
+          { label:'Outliers', value: q.outliers.length,            color:'#ff6b6b'            },
+        ]));
+
+        // ── Curva de densidad acumulada ──────────────
+        const sorted = [...vals].sort((a,b)=>a-b);
+        const { div: d3, id: id3 } = makeCard(`Distribución acumulada · ${col}`, 'CDF');
+        grid.appendChild(d3);
+        const step = Math.max(1, Math.floor(sorted.length/60));
+        const cdfPts = sorted.filter((_,i)=>i%step===0);
+        const ch3 = new Chart(document.getElementById(id3), {
+          type: 'line',
+          data: {
+            labels: cdfPts.map(v=>stat.fmt(v,1)),
+            datasets: [{
+              data:            cdfPts.map((_,i)=>((i+1)/sorted.length)*100),
+              borderColor:     layerColor(),
+              backgroundColor: layerColor(0.08),
+              fill: true, tension: 0.3,
+              pointRadius: 0, borderWidth: 2,
+            }],
+          },
+          options: {
+            ...chartOpts(),
+            scales: {
+              x: { ticks:{...chartOpts().scales.x.ticks, maxTicksLimit:8}, grid:{color:CD.grid} },
+              y: { ...chartOpts().scales.y, title:{display:true,text:'% acumulado',color:CD.tick,font:{size:8,family:'Space Mono'}} },
+            },
+          },
+        });
+        analysis.charts.push(ch3);
+
+      } else {
+        // ── Columna categórica: barras + donut ────────
+        const freqMap = stat.freqMap(features, col);
+        const entries = Object.entries(freqMap).sort((a,b)=>b[1]-a[1]).slice(0,20);
+
+        const { div: d1, id: id1 } = makeCard(`Frecuencias · ${col}`, `${entries.length} categorías`);
+        grid.appendChild(d1);
+        const PALETTE = ['#00d4ff','#00e5aa','#1a6fff','#ffb700','#ff6b6b','#c792ea','#f78c6c','#80cbc4','#89ddff','#f07178'];
+        const ch1 = new Chart(document.getElementById(id1), {
+          type: 'bar',
+          data: {
+            labels: entries.map(([k])=>k.length>16?k.slice(0,16)+'…':k),
+            datasets: [{ data: entries.map(([,v])=>v), backgroundColor: layerColor(0.6), borderColor: layerColor(), borderWidth:1, borderRadius:3 }],
+          },
+          options: { ...chartOpts(), indexAxis: entries.length > 8 ? 'y' : 'x' },
+        });
+        analysis.charts.push(ch1);
+
+        const { div: d2, id: id2 } = makeCard(`Proporción · ${col}`, 'donut');
+        grid.appendChild(d2);
+        const ch2 = new Chart(document.getElementById(id2), {
+          type: 'doughnut',
+          data: {
+            labels: entries.map(([k])=>k),
+            datasets: [{ data: entries.map(([,v])=>v), backgroundColor: PALETTE.slice(0,entries.length), borderWidth:0 }],
+          },
+          options: {
+            responsive:true, maintainAspectRatio:false,
+            plugins: {
+              legend: { display:true, position:'right', labels:{color:'#c8dde8',font:{size:11,family:'Space Mono'},boxWidth:12} },
+              tooltip: { backgroundColor:CD.tooltip.bg,titleColor:CD.tooltip.title,bodyColor:CD.tooltip.body },
+            },
+          },
+        });
+        analysis.charts.push(ch2);
+      }
+
+      // Tarjeta informativa al pie de distribución
+      grid.appendChild(makeInfoCard(
+        '📉',
+        'Modulo de Distribucion',
+        'Explora como se reparten los valores de una columna. Fundamental para detectar si los datos siguen un patron normal, si estan sesgados o si tienen valores atipicos.',
+        [
+          'Histograma: frecuencia de valores agrupados en intervalos, revela la forma de la distribucion.',
+          'Cuartiles y boxplot: Q1, mediana, Q3, minimo, maximo y media para detectar rangos y dispersion.',
+          'Distribucion acumulada (CDF): porcentaje de datos por debajo de un valor dado.',
+          'Estadisticas: media, mediana, moda, desviacion estandar, IQR y outliers.',
+          'Categoricas: barras de frecuencia y grafico de proporcion (donut).',
+        ]
+      ));
+    }
+
+    // ═══════════════════════════════════════════════════
+    // MODO 3 — CORRELACIÓN
+    // Scatter plot + línea de tendencia
+    // ═══════════════════════════════════════════════════
+    function renderModeCorrelacion(features, grid) {
+      const colX = analysis.colX;
+      const colY = analysis.colY || analysis.schema?.numericas?.[1];
+      grid.className = 'sv-charts-grid layout-2';
+
+      if (!colX || !colY) {
+        grid.innerHTML = '<div class="sv-analysis-empty">Selecciona dos columnas numéricas</div>';
+        return;
+      }
+
+      const pairs = features.map(f => {
+        const x = +f.properties?.[colX], y = +f.properties?.[colY];
+        return (!isNaN(x) && !isNaN(y)) ? {x, y} : null;
+      }).filter(Boolean);
+
+      if (!pairs.length) return;
+
+      // Coeficiente de correlación de Pearson
+      const xs = pairs.map(p=>p.x), ys = pairs.map(p=>p.y);
+      const mx = stat.mean(xs), my = stat.mean(ys);
+      const num  = pairs.reduce((s,p)=>s+(p.x-mx)*(p.y-my),0);
+      const den  = Math.sqrt(pairs.reduce((s,p)=>s+(p.x-mx)**2,0)) *
+                   Math.sqrt(pairs.reduce((s,p)=>s+(p.y-my)**2,0));
+      const pearson = den ? (num/den) : 0;
+
+      // Línea de regresión
+      const slope = num / (pairs.reduce((s,p)=>s+(p.x-mx)**2,0)||1);
+      const inter = my - slope*mx;
+      const rngX  = [Math.min(...xs), Math.max(...xs)];
+      const trend = rngX.map(x=>({x, y: slope*x+inter}));
+
+      const { div: d1, id: id1 } = makeCard(`${colX} vs ${colY}`, `r = ${stat.fmt(pearson,3)}`);
+      grid.appendChild(d1);
+      // Muestra hasta 500 puntos para rendimiento
+      const sample = pairs.length > 500 ? pairs.filter((_,i)=>i%Math.ceil(pairs.length/500)===0) : pairs;
+      const ch1 = new Chart(document.getElementById(id1), {
+        type: 'scatter',
+        data: {
+          datasets: [
+            {
+              label: 'Datos',
+              data: sample,
+              backgroundColor: layerColor(0.5),
+              pointRadius: 3,
+              pointHoverRadius: 5,
+            },
+            {
+              label: 'Tendencia',
+              data: trend,
+              type: 'line',
+              borderColor: '#ff6b6b',
+              borderWidth: 2,
+              pointRadius: 0,
+              fill: false,
+              tension: 0,
+            },
+          ],
+        },
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          animation:{duration:200},
+          plugins: {
+            legend: { display:true, labels:{color:'#c8dde8',font:{size:11,family:'Space Mono'},boxWidth:12} },
+            tooltip: { backgroundColor:CD.tooltip.bg,titleColor:CD.tooltip.title,bodyColor:CD.tooltip.body,borderColor:CD.tooltip.border,borderWidth:1 },
+          },
+          scales: {
+            x: { title:{display:true,text:colX,color:'#c8dde8',font:{size:11,family:'Space Mono'}}, ticks:{color:'#c8dde8',font:{size:10,family:'Space Mono'}}, grid:{color:CD.grid} },
+            y: { title:{display:true,text:colY,color:'#c8dde8',font:{size:11,family:'Space Mono'}}, ticks:{color:'#c8dde8',font:{size:10,family:'Space Mono'}}, grid:{color:CD.grid} },
+          },
+        },
+      });
+      analysis.charts.push(ch1);
+
+      // KPI de correlación
+      const strength = Math.abs(pearson);
+      const label    = strength > 0.8 ? 'Muy fuerte' : strength > 0.5 ? 'Moderada' : strength > 0.3 ? 'Débil' : 'Muy débil';
+      const sign     = pearson >= 0 ? 'Positiva' : 'Negativa';
+      const col      = strength > 0.6 ? 'var(--accent-teal)' : strength > 0.3 ? '#ffb700' : '#ff6b6b';
+
+      grid.appendChild(makeKpiCard('Correlación de Pearson', [
+        { label:'r',          value: stat.fmt(pearson,4),   color: col           },
+        { label:'r²',         value: stat.fmt(pearson**2,4),color: col           },
+        { label:'Dirección',  value: sign,                  color:'var(--text-primary)' },
+        { label:'Fuerza',     value: label,                 color: col           },
+        { label:'Pares (N)',  value: pairs.length,          color:'var(--text-secondary)'},
+        { label:'Pendiente',  value: stat.fmt(slope,4),     color:'var(--accent-cyan)' },
+      ]));
+
+      // Si hay una 3era columna numérica, bubble chart
+      const schema = analysis.schema;
+      const colZ = schema?.numericas?.find(c=>c!==colX && c!==colY);
+      if (colZ) {
+        const bubblePts = features.map(f=>{
+          const x=+f.properties?.[colX], y=+f.properties?.[colY], r=+f.properties?.[colZ];
+          return (!isNaN(x)&&!isNaN(y)&&!isNaN(r)) ? {x,y,r:Math.sqrt(Math.abs(r))*0.8} : null;
+        }).filter(Boolean).slice(0,200);
+
+        if (bubblePts.length) {
+          const { div: d2, id: id2 } = makeCard(`${colX} / ${colY} / ${colZ}`, 'bubble');
+          grid.appendChild(d2);
+          const ch2 = new Chart(document.getElementById(id2), {
+            type: 'bubble',
+            data: {
+              datasets: [{
+                label: colZ,
+                data: bubblePts,
+                backgroundColor: layerColor(0.35),
+                borderColor: layerColor(0.8),
+                borderWidth: 1,
+              }],
+            },
+            options: {
+              responsive:true, maintainAspectRatio:false,
+              plugins: { legend:{display:false}, tooltip:{backgroundColor:CD.tooltip.bg,titleColor:CD.tooltip.title,bodyColor:CD.tooltip.body} },
+              scales: {
+                x: { title:{display:true,text:colX,color:'#c8dde8',font:{size:11,family:'Space Mono'}}, ticks:{color:'#c8dde8',font:{size:10,family:'Space Mono'}}, grid:{color:CD.grid} },
+                y: { title:{display:true,text:colY,color:'#c8dde8',font:{size:11,family:'Space Mono'}}, ticks:{color:'#c8dde8',font:{size:10,family:'Space Mono'}}, grid:{color:CD.grid} },
+              },
+            },
+          });
+          analysis.charts.push(ch2);
+        }
+      }
+
+      // Tarjeta informativa al pie de correlacion
+      grid.appendChild(makeInfoCard(
+        '🔗',
+        'Modulo de Correlacion',
+        'Mide la relacion lineal entre dos columnas numericas. Descubre si dos variables estan relacionadas o son independientes entre si.',
+        [
+          'Scatter plot: cada punto es un feature. La nube revela direccion y fuerza de la relacion.',
+          'Linea de tendencia (regresion lineal): direccion general calculada con minimos cuadrados.',
+          'Coeficiente r de Pearson: valor entre -1 y 1. Cercano a 1 indica relacion fuerte.',
+          'r² indica que porcentaje de la variacion de Y es explicado por X.',
+          'Bubble chart: agrega una tercera variable como tamanio del punto (requiere 3 columnas numericas).',
+        ]
+      ));
+    }
+
+    // ═══════════════════════════════════════════════════
+    // MODO 4 — TEMPORAL
+    // Solo activo si el validator detectó columnas de fecha
+    // ═══════════════════════════════════════════════════
+    function renderModeTemporal(features, grid) {
+      const schema    = analysis.schema;
+      const fechaCols = schema?.fechas || [];
+      const numCols   = schema?.numericas || [];
+      grid.className  = 'sv-charts-grid layout-1';
+
+      if (!fechaCols.length) {
+        grid.innerHTML = '<div class="sv-analysis-empty">Sin columnas de fecha detectadas en este archivo</div>';
+        return;
+      }
+
+      // Usar la columna de fecha elegida por el usuario; fallback a la primera detectada
+      const fechaCol = (analysis.fechaCol && fechaCols.includes(analysis.fechaCol))
+        ? analysis.fechaCol
+        : fechaCols[0];
+      // La columna numérica es la seleccionada por el usuario en "Columna de análisis"
+      // pero solo si es una columna numérica — si no, usar la primera numérica
+      const numColAct = numCols.includes(analysis.colX) ? analysis.colX : (numCols[0] || null);
+
+      if (!numColAct) {
+        grid.innerHTML = '<div class="sv-analysis-empty">Selecciona una columna numérica en "Columna de análisis"</div>';
+        return;
+      }
+
+      // Construir serie temporal con todos los puntos individuales
+      const pts = features
+        .map(f => {
+          const rawDate = f.properties?.[fechaCol];
+          const val     = +f.properties?.[numColAct];
+          const d       = new Date(rawDate);
+          if (!rawDate || isNaN(d.getTime()) || isNaN(val)) return null;
+          return { ts: d.getTime(), fecha: String(rawDate), val };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.ts - b.ts);
+
+      if (!pts.length) {
+        grid.innerHTML = '<div class="sv-analysis-empty">Sin valores de fecha válidos en los features visibles</div>';
+        return;
+      }
+
+      // Agrupar por fecha exacta (no por mes) para máximo detalle
+      const byFecha = {};
+      pts.forEach(p => {
+        if (!byFecha[p.fecha]) byFecha[p.fecha] = [];
+        byFecha[p.fecha].push(p.val);
+      });
+      const fechasOrdenadas = Object.keys(byFecha).sort();
+      const numPeriods = fechasOrdenadas.length;
+
+      // También agrupar por mes para la vista de estadísticas
+      const byMes = {};
+      pts.forEach(p => {
+        const dt  = new Date(p.ts);
+        const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+        if (!byMes[key]) byMes[key] = [];
+        byMes[key].push(p.val);
+      });
+      const meses = Object.keys(byMes).sort();
+
+      // Medias por período para la línea principal
+      const mediasPorFecha = fechasOrdenadas.map(k => stat.mean(byFecha[k]));
+
+      grid.className = 'sv-charts-grid layout-2';
+
+      // ── Gráfica 1: línea temporal — media de cada fecha exacta ──────
+      const { div: d1, id: id1 } = makeCard(
+        `${numColAct} · evolución temporal`,
+        `${pts.length} registros · ${numPeriods} fechas · ${meses.length} períodos`
+      );
+      d1.style.minHeight = '260px';
+      grid.appendChild(d1);
+
+      const ch1 = new Chart(document.getElementById(id1), {
+        type: 'line',
+        data: {
+          labels: fechasOrdenadas,
+          datasets: [{
+            label: `Media ${numColAct}`,
+            data:  mediasPorFecha,
+            borderColor:          layerColor(),
+            backgroundColor:      layerColor(0.12),
+            fill:                 true,
+            tension:              numPeriods <= 6 ? 0 : 0.3,
+            pointRadius:          numPeriods > 50 ? 2 : 5,
+            pointBackgroundColor: layerColor(),
+            pointHoverRadius:     7,
+            borderWidth:          2.5,
+          }],
+        },
+        options: {
+          ...chartOpts(),
+          plugins: {
+            ...chartOpts().plugins,
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#060d1a',
+              titleColor:  '#00d4ff',
+              bodyColor:   '#e0edf5',
+              borderColor: 'rgba(0,212,255,0.3)',
+              borderWidth: 1,
+              padding:     10,
+              callbacks: {
+                title: (items) => `📅 ${items[0].label}`,
+                label: (item)  => [
+                  ` Media: ${stat.fmt(item.raw)}`,
+                  ` N registros: ${byFecha[fechasOrdenadas[item.dataIndex]]?.length || 0}`,
+                ],
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: { color: '#c8dde8', font:{ size:11, family:'Space Mono' }, maxTicksLimit: 10, maxRotation: 35 },
+              grid:  { color: 'rgba(255,255,255,0.08)' },
+              title: { display:true, text: fechaCol, color:'#c8dde8', font:{ size:12, family:'Space Mono', weight:'bold' } },
+            },
+            y: {
+              ticks: { color: '#c8dde8', font:{ size:11, family:'Space Mono' } },
+              grid:  { color: 'rgba(255,255,255,0.08)' },
+              title: { display:true, text: numColAct, color:'#c8dde8', font:{ size:12, family:'Space Mono', weight:'bold' } },
+              beginAtZero: false,
+            },
+          },
+        },
+      });
+      analysis.charts.push(ch1);
+
+      // ── Gráfica 2: estadísticas por período (mes) ─────────────────
+      if (meses.length >= 2) {
+        const { div: d2, id: id2 } = makeCard(
+          `Estadísticas de ${numColAct} por período`,
+          'Máx · Media · Mín'
+        );
+        d2.style.minHeight = '260px';
+        grid.appendChild(d2);
+        const LEGEND_OPTS = {
+          display: true,
+          labels: { color:'#e0edf5', font:{ size:11, family:'Space Mono' }, boxWidth:14, padding:12 },
+        };
+        const ch2 = new Chart(document.getElementById(id2), {
+          type: 'line',
+          data: {
+            labels: meses,
+            datasets: [
+              {
+                label: 'Máx',
+                data: meses.map(k => stat.max(byMes[k])),
+                borderColor:'#ff6b6b', backgroundColor:'rgba(255,107,107,0.08)',
+                fill:'+1', tension:0.3, pointRadius:4, borderWidth:2, pointBackgroundColor:'#ff6b6b',
+              },
+              {
+                label: `Media ${numColAct}`,
+                data: meses.map(k => stat.mean(byMes[k])),
+                borderColor: layerColor(), backgroundColor: layerColor(0.08),
+                fill: false, tension:0.3, pointRadius:5, borderWidth:3,
+                pointBackgroundColor: layerColor(),
+              },
+              {
+                label: 'Mín',
+                data: meses.map(k => stat.min(byMes[k])),
+                borderColor:'#00e5aa', backgroundColor:'rgba(0,229,170,0.05)',
+                fill: false, tension:0.3, pointRadius:4, borderWidth:2, pointBackgroundColor:'#00e5aa',
+              },
+            ],
+          },
+          options: {
+            ...chartOpts(),
+            plugins: { ...chartOpts().plugins, legend: LEGEND_OPTS },
+          },
+        });
+        analysis.charts.push(ch2);
+      }
+
+      // Tarjeta informativa al pie de temporal
+      grid.appendChild(makeInfoCard(
+        '📅',
+        'Modulo Temporal',
+        'Visualiza como evoluciona una variable numerica a lo largo del tiempo. Util en estudios de seguimiento y monitoreo con multiples fechas de muestreo.',
+        [
+          'Linea temporal principal: media de la columna por cada fecha exacta detectada.',
+          'Estadisticas por periodo: maximo, media y minimo agrupados por mes para detectar tendencias.',
+          'Tooltips con fecha, valor medio y numero de registros por periodo.',
+          'Requiere columna de fecha (formato YYYY-MM-DD) y columna numerica.',
+          'Elige la columna de fecha en el selector amarillo del sidebar.',
+        ]
+      ));
+    }
+
+    // ═══════════════════════════════════════════════════
+    // MODO 5 — COMPARAR
+    // Usuario elige columnas X e Y libremente
+    // Barras agrupadas o lado a lado
+    // ═══════════════════════════════════════════════════
+    function renderModeComparar(features, grid) {
+      const colX   = analysis.colX;
+      const colY   = analysis.colY;
+      const schema = analysis.schema;
+      grid.className = 'sv-charts-grid layout-1';
+
+      if (!colX || !colY) {
+        grid.innerHTML = '<div class="sv-analysis-empty">Selecciona las columnas X e Y para comparar</div>';
+        return;
+      }
+
+      const isXNum = schema?.numericas?.includes(colX);
+      const isYNum = schema?.numericas?.includes(colY);
+
+      if (isXNum && isYNum) {
+        // ── Dos numéricas: barras agrupadas de media, mediana ──
+        const valsX = stat.vals(features, colX);
+        const valsY = stat.vals(features, colY);
+
+        const { div, id } = makeCard(`${colX} vs ${colY}`, 'comparación estadística');
+        grid.appendChild(div);
+        const labels  = ['Media','Mediana','Mín','Máx','Desv. std'];
+        const dataX   = [stat.mean(valsX), stat.median(valsX), stat.min(valsX), stat.max(valsX), stat.std(valsX)];
+        const dataY   = [stat.mean(valsY), stat.median(valsY), stat.min(valsY), stat.max(valsY), stat.std(valsY)];
+
+        const ch = new Chart(document.getElementById(id), {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [
+              { label: colX, data: dataX, backgroundColor: layerColor(0.6), borderColor: layerColor(), borderWidth:1, borderRadius:3 },
+              { label: colY, data: dataY, backgroundColor: 'rgba(199,146,234,0.6)', borderColor: '#c792ea', borderWidth:1, borderRadius:3 },
+            ],
+          },
+          options: {
+            ...chartOpts(),
+            plugins: {
+              ...chartOpts().plugins,
+              legend: { display:true, labels:{color:'#c8dde8',font:{size:11,family:'Space Mono'},boxWidth:12} },
+            },
+          },
+        });
+        analysis.charts.push(ch);
+
+        // KPIs de diferencia
+        grid.appendChild(makeKpiCard('Diferencia entre columnas', [
+          { label:`Δ Media`,    value: stat.fmt(stat.mean(valsX)  - stat.mean(valsY)),   color:'#ffb700' },
+          { label:`Δ Mediana`,  value: stat.fmt(stat.median(valsX)- stat.median(valsY)), color:'#ffb700' },
+          { label:`Δ Máx`,      value: stat.fmt(stat.max(valsX)   - stat.max(valsY)),    color:'var(--accent-cyan)' },
+          { label:`Δ Mín`,      value: stat.fmt(stat.min(valsX)   - stat.min(valsY)),    color:'var(--accent-teal)' },
+        ]));
+
+      } else if (!isXNum && isYNum) {
+        // ── Categórica vs numérica: media por categoría ──
+        const groups = {};
+        features.forEach(f => {
+          const cat = String(f.properties?.[colX] ?? 'N/A');
+          const val = +f.properties?.[colY];
+          if (!isNaN(val)) {
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(val);
+          }
+        });
+        const entries = Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).slice(0,15);
+        const { div, id } = makeCard(`Media de ${colY} por ${colX}`, 'categoría × numérica');
+        grid.appendChild(div);
+        const ch = new Chart(document.getElementById(id), {
+          type: 'bar',
+          data: {
+            labels: entries.map(([k])=>k.length>14?k.slice(0,14)+'…':k),
+            datasets: [{
+              label: `Media ${colY}`,
+              data:  entries.map(([,v])=>stat.mean(v)),
+              backgroundColor: layerColor(0.6), borderColor: layerColor(), borderWidth:1, borderRadius:3,
+            }],
+          },
+          options: { ...chartOpts(), indexAxis: entries.length > 8 ? 'y' : 'x' },
+        });
+        analysis.charts.push(ch);
+
+      } else {
+        // ── Dos categóricas: frecuencias cruzadas ────────
+        const freqX = stat.freqMap(features, colX);
+        const freqY = stat.freqMap(features, colY);
+        const topX  = Object.entries(freqX).sort((a,b)=>b[1]-a[1]).slice(0,8);
+        const topY  = Object.entries(freqY).sort((a,b)=>b[1]-a[1]).slice(0,8);
+
+        grid.className = 'sv-charts-grid layout-2';
+        const PALETTE = ['#00d4ff','#00e5aa','#1a6fff','#ffb700','#ff6b6b','#c792ea','#f78c6c','#80cbc4'];
+
+        [['colX',colX,topX,'bar'],['colY',colY,topY,'doughnut']].forEach(([_,col,entries,tipo]) => {
+          const { div, id } = makeCard(col, `${entries.length} categorías`);
+          grid.appendChild(div);
+          const ch = new Chart(document.getElementById(id), {
+            type: tipo,
+            data: {
+              labels: entries.map(([k])=>k),
+              datasets: [{ data: entries.map(([,v])=>v), backgroundColor: PALETTE, borderWidth:0, borderRadius:tipo==='bar'?3:0 }],
+            },
+            options: tipo==='bar' ? chartOpts() : {
+              responsive:true, maintainAspectRatio:false,
+              plugins: { legend:{display:true,position:'right',labels:{color:CD.tick,font:{size:8},boxWidth:10}}, tooltip:{backgroundColor:CD.tooltip.bg} },
+            },
+          });
+          analysis.charts.push(ch);
+        });
+      }
+      // Tarjeta informativa al pie de comparar
+      grid.appendChild(makeInfoCard(
+        '⇄',
+        '¿Qué es el módulo de Comparar?',
+        'El módulo Comparar te permite confrontar directamente dos columnas de tu capa para entender sus diferencias estadísticas o relaciones entre categorías. Es flexible: funciona con dos numéricas, una categórica y una numérica, o incluso dos categóricas.',
+        [
+          'Dos columnas numéricas: barras agrupadas que muestran media, mediana, mín, máx y desviación estándar de cada columna, más las diferencias absolutas entre ellas.',
+          'Categórica vs numérica: barras horizontales con la media de la columna numérica para cada categoría — ideal para comparar especies, zonas o tipos.',
+          'Dos categóricas: frecuencias de cada categoría en barras y donut para ver su distribución individual.',
+          'Selecciona la columna X en "Columna de análisis" y la columna Y en el selector de la segunda fila del sidebar.',
+        ]
+      ));
+    }
+
+
+    // ═══════════════════════════════════════════════════════
+    // SISTEMA DE ETIQUETAS EN MAPA
+    // ═══════════════════════════════════════════════════════
+
+    // Estado global de etiquetas y clasificación
+    const mapStyle = {
+      labelCol:     '',    // columna para etiquetar
+      classifyCol:  '',    // columna para clasificar por color
+      classifyMode: 'auto',// 'auto' | 'manual'
+      classifyMap:  null,  // Map<valor|rango_label, color>
+    };
+
+    // Paleta de colores para clasificación
+    const CLASS_PALETTE = [
+      '#00d4ff','#ffb700','#ff6b6b','#00e5aa','#c792ea',
+      '#f78c6c','#1a6fff','#80cbc4','#f07178','#89ddff',
+      '#82aaff','#ffd700','#ff4488','#39ff14','#ff8c00',
+    ];
+
+    // ── Actualizar estilos de todas las capas vectoriales ──────────
+    function rebuildLayerStyles() {
+      state.capas.filter(c => c.leafletLayer && c.geojson && !c.es_raster).forEach(capa => {
+        capa.leafletLayer.eachLayer(layer => {
+          const props = layer.feature?.properties || {};
+          const baseColor = mapStyle.classifyCol
+            ? getClassColor(props[mapStyle.classifyCol])
+            : capa.color;
+
+          // Leaflet distingue circleMarker de polígono/línea.
+          // setStyle funciona en ambos pero circleMarker necesita
+          // fillColor explícito — 'color' en circleMarker es el borde.
+          const isPoint = layer instanceof L.CircleMarker;
+          try {
+            if (isPoint) {
+              layer.setStyle({
+                fillColor:   baseColor,
+                color:       'rgba(255,255,255,0.75)',
+                fillOpacity: 0.9,
+                weight:      1.5,
+                opacity:     1,
+              });
+            } else {
+              layer.setStyle({
+                color:       baseColor,
+                fillColor:   baseColor,
+                fillOpacity: 0.35,
+                weight:      2,
+                opacity:     0.9,
+              });
+            }
+          } catch (e) { /* sin geometría */ }
+
+          // Quitar tooltips de Leaflet (no los usamos más)
+          layer.unbindTooltip();
+        });
+      });
+
+      // Etiquetas como DivIcon markers — siempre todos los features
+      if (state.labelGroup) state.labelGroup.clearLayers();
+
+      if (mapStyle.labelCol && state.labelGroup) {
+        state.capas.filter(c => c.visible && c.geojson && !c.es_raster).forEach(capa => {
+          (capa.geojson.features || []).forEach(feature => {
+            const props = feature.properties || {};
+            const val   = props[mapStyle.labelCol];
+            if (val == null) return;
+
+            const labelText = typeof val === 'number' ? stat.fmt(val, 2) : String(val);
+
+            // Obtener coordenadas del feature
+            let latlng = null;
+            try {
+              const geom = feature.geometry;
+              if (!geom) return;
+              if (geom.type === 'Point') {
+                latlng = L.latLng(geom.coordinates[1], geom.coordinates[0]);
+              } else if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
+                // Centroide aproximado
+                const layer = L.geoJSON(feature);
+                latlng = layer.getBounds().getCenter();
+              } else if (geom.type === 'LineString') {
+                const mid = Math.floor(geom.coordinates.length / 2);
+                latlng = L.latLng(geom.coordinates[mid][1], geom.coordinates[mid][0]);
+              }
+            } catch { return; }
+
+            if (!latlng) return;
+
+            const icon = L.divIcon({
+              className: 'sv-label-marker',
+              html: `<div class="sv-label-tag">${labelText}</div>`,
+              // El icono se desplaza para que el puntero quede sobre el punto
+              iconAnchor: [0, 30],
+              iconSize:   null,
+            });
+
+            L.marker(latlng, {
+              icon,
+              interactive: false,  // no captura eventos del mapa
+              zIndexOffset: 1000,
+            }).addTo(state.labelGroup);
+          });
+        });
+      }
+
+      updateClassifyLegend();
+    }
+
+    // ── Obtener color para un valor según clasificación ────────────
+    function getClassColor(val) {
+      if (!mapStyle.classifyMap || val == null) {
+        return state.capas.find(c => c.id === state.selectedLayer)?.color || '#00d4ff';
+      }
+      // Despachar al método correcto según el modo activo
+      if (mapStyle.classifyMode === 'manual-range') {
+        return getRangeColor(val);
+      }
+      // Modo categórico/auto: buscar el valor como string
+      const key = String(val);
+      return mapStyle.classifyMap.get(key) || '#aaaaaa';
+    }
+
+    // ── Construir mapa de clasificación automática (categórico) ────
+    function buildAutoClassifyMap(features, col) {
+      const vals = [...new Set(features.map(f => f.properties?.[col]).filter(v=>v!=null))];
+      const map  = new Map();
+      vals.forEach((v, i) => map.set(String(v), CLASS_PALETTE[i % CLASS_PALETTE.length]));
+      mapStyle.classifyMap = map;
+    }
+
+    // ── Construir mapa de clasificación por rangos (numérico) ──────
+    function buildRangeClassifyMap(min, max, numClasses) {
+      const step = (max - min) / numClasses;
+      const map  = new Map();
+      for (let i = 0; i < numClasses; i++) {
+        const lo  = min + i * step;
+        const hi  = min + (i + 1) * step;
+        const key = `${stat.fmt(lo,1)}-${stat.fmt(hi,1)}`;
+        map.set(`__range_${i}`, { lo, hi, key, color: CLASS_PALETTE[i % CLASS_PALETTE.length] });
+      }
+      mapStyle.classifyMap = map;
+      mapStyle.classifyMode = 'manual-range';
+    }
+
+    // ── Obtener color para un valor numérico con rangos ────────────
+    function getRangeColor(val) {
+      if (!mapStyle.classifyMap) return '#00d4ff';
+      const n = +val;
+      for (const [, r] of mapStyle.classifyMap) {
+        if (typeof r === 'object' && n >= r.lo && n <= r.hi) return r.color;
+      }
+      return '#888';
+    }
+
+    // ── Decidir auto vs manual range ──────────────────────────────
+    const REPEAT_THRESHOLD = 0.3; // si >30% de valores se repiten → auto
+
+    function analyzeColForClassification(features, col) {
+      const vals  = features.map(f => f.properties?.[col]).filter(v=>v!=null);
+      const total = vals.length;
+      if (!total) return 'none';
+
+      const isNum     = vals.every(v => !isNaN(+v));
+      const unique    = new Set(vals.map(String)).size;
+      const repeatRatio = (total - unique) / total;
+
+      if (!isNum)                  return 'auto-cat';
+      if (repeatRatio >= REPEAT_THRESHOLD || unique <= 15) return 'auto-cat';
+      return 'manual-range'; // numerics con poca repetición
+    }
+
+    // ── Render leyenda de clasificación ────────────────────────────
+    function updateClassifyLegend() {
+      const el = document.getElementById('sv-classify-legend');
+      if (!el) return;
+
+      if (!mapStyle.classifyCol || !mapStyle.classifyMap) {
+        el.style.display = 'none';
+        return;
+      }
+
+      el.style.display = 'block';
+      let html = '<div style="font-family:var(--font-mono);font-size:9px;letter-spacing:1px;color:#8bbdd6;margin-bottom:4px;">Leyenda</div>';
+
+      if (mapStyle.classifyMode === 'manual-range') {
+        for (const [, r] of mapStyle.classifyMap) {
+          if (typeof r !== 'object') continue;
+          html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+            <div style="width:10px;height:10px;border-radius:50%;background:${r.color};flex-shrink:0;"></div>
+            <span style="font-family:var(--font-mono);font-size:9px;color:#c8dde8;">${r.key}</span>
+          </div>`;
+        }
+      } else {
+        for (const [val, color] of mapStyle.classifyMap) {
+          const label = val.length > 18 ? val.slice(0,18)+'…' : val;
+          html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+            <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></div>
+            <span style="font-family:var(--font-mono);font-size:9px;color:#c8dde8;">${label}</span>
+          </div>`;
+        }
+      }
+
+      el.innerHTML = html;
+    }
+
+    // ── Listeners de etiquetas ─────────────────────────────────────
+    document.getElementById('sv-label-col')?.addEventListener('change', (e) => {
+      mapStyle.labelCol = e.target.value;
+      rebuildLayerStyles();
+    });
+
+    // ── Listeners de clasificación ─────────────────────────────────
+    document.getElementById('sv-classify-col')?.addEventListener('change', (e) => {
+      const col      = e.target.value;
+      mapStyle.classifyCol  = col;
+      mapStyle.classifyMode = 'auto';
+      mapStyle.classifyMap  = null;
+
+      const rangeWrap = document.getElementById('sv-classify-range-wrap');
+
+      if (!col) {
+        if (rangeWrap) rangeWrap.style.display = 'none';
+        rebuildLayerStyles();
+        return;
+      }
+
+      const features = state.capas
+        .filter(c => c.visible && c.geojson)
+        .flatMap(c => c.geojson.features || []);
+
+      const mode = analyzeColForClassification(features, col);
+
+      if (mode === 'manual-range') {
+        // Mostrar panel de rangos
+        if (rangeWrap) rangeWrap.style.display = 'block';
+        const vals = features.map(f => +f.properties?.[col]).filter(v => !isNaN(v));
+        document.getElementById('sv-range-min').value     = stat.fmt(stat.min(vals), 1);
+        document.getElementById('sv-range-max').value     = stat.fmt(stat.max(vals), 1);
+        document.getElementById('sv-range-classes').value = 5;
+        mapStyle.classifyMap  = null;
+        mapStyle.classifyMode = 'manual-range';
+        // Aplicar rangos automáticos iniciales
+        buildRangeClassifyMap(stat.min(vals), stat.max(vals), 5);
+        rebuildLayerStyles();
+      } else if (mode === 'auto-cat') {
+        if (rangeWrap) rangeWrap.style.display = 'none';
+        buildAutoClassifyMap(features, col);
+        mapStyle.classifyMode = 'auto';
+        rebuildLayerStyles();
+      } else {
+        if (rangeWrap) rangeWrap.style.display = 'none';
+        rebuildLayerStyles();
+      }
+    });
+
+    // Aplicar rangos manuales
+    document.getElementById('sv-apply-range-btn')?.addEventListener('click', () => {
+      const col   = mapStyle.classifyCol;
+      if (!col) return;
+      const mn    = +document.getElementById('sv-range-min').value;
+      const mx    = +document.getElementById('sv-range-max').value;
+      const clss  = Math.min(10, Math.max(2, +document.getElementById('sv-range-classes').value));
+      if (isNaN(mn) || isNaN(mx) || mn >= mx) return;
+      buildRangeClassifyMap(mn, mx, clss);
+      rebuildLayerStyles();
+    });
+
+    // ── Override de getClassColor para rangos ──────────────────────
+    const _origGetClassColor = getClassColor;
+    // Patch: si mode es manual-range, usar getRangeColor
+    const _getClassColorPatched = function(val) {
+      if (mapStyle.classifyMode === 'manual-range') return getRangeColor(val);
+      return _origGetClassColor(val);
+    };
+
+    // Reemplazar rebuildLayerStyles para usar la versión patcheada
+    const _origRebuild = rebuildLayerStyles;
+    // La función ya está definida arriba, solo reasignamos getClassColor internamente:
+    // (rebuildLayerStyles ya llama a getClassColor, lo reemplazamos)
+    Object.defineProperty(window, '_sivagGetClassColor', { value: _getClassColorPatched });
+
+    // ── CSS de las etiquetas en el mapa ────────────────────────────
+    // ── CSS de las etiquetas ──────────────────────────────────────
+    const labelStyle = document.createElement('style');
+    labelStyle.textContent = `
+      /* ── Etiqueta tipo callout tag (DivIcon) ────────────────── */
+      .sv-label-marker {
+        /* Sin fondo ni borde del marcador Leaflet */
+        background: transparent !important;
+        border: none !important;
+      }
+
+      .sv-label-tag {
+        /* Forma: rectángulo con bordes redondeados + puntero inferior izquierdo */
+        position: relative;
+        display: inline-block;
+        background: #0a2540;
+        border: 1.5px solid #00c8f0;
+        border-radius: 6px;
+        color: #ffffff;
+        font-family: 'Exo 2', 'Space Grotesk', sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        line-height: 1;
+        padding: 5px 10px;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(0,180,240,0.4), 0 0 0 1px rgba(0,200,255,0.15);
+        cursor: default;
+        user-select: none;
+      }
+
+      /* Puntero triangular inferior-izquierdo que apunta al punto del mapa */
+      .sv-label-tag::after {
+        content: '';
+        position: absolute;
+        bottom: -7px;
+        left: 10px;
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 7px solid #00c8f0;
+      }
+
+      /* Punto pequeño decorativo dentro del puntero (cubre el borde) */
+      .sv-label-tag::before {
+        content: '';
+        position: absolute;
+        bottom: -5px;
+        left: 11px;
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 6px solid #0a2540;
+        z-index: 1;
+      }
+    `;
+    document.head.appendChild(labelStyle);
+
+    // ── Reconstruir estilos cuando cambia la capa seleccionada ─────
+    const _origSelectLayer = selectLayer;
+    // (selectLayer ya está definido — se llama rebuildLayerStyles después)
+
+    // ── Modo activo ───────────────────────────────────────
+    function setMode(mode) {
+      analysis.mode = mode;
+      document.querySelectorAll('.sv-chart-tab').forEach(t =>
+        t.classList.toggle('active', t.dataset.mode === mode)
+      );
+      // Re-filtrar el selector de columna X: en temporal solo numéricas
+      updateAttributeSelector();
+      // Mostrar/ocultar selector Y (Comparar/Correlación)
+      const showY = (mode === 'comparar' || mode === 'correlacion');
+      const ySelect = document.getElementById('sv-chart-attr-y');
+      const ywrap   = document.getElementById('sb-col-y-wrap');
+      if (ySelect) ySelect.style.display = showY ? 'block' : 'none';
+      if (ywrap)   ywrap.style.display   = showY ? 'block' : 'none';
+
+      // Mostrar/ocultar selector de fecha (solo en Temporal)
+      const fechaWrap = document.getElementById('sb-fecha-wrap');
+      if (fechaWrap) fechaWrap.style.display = (mode === 'temporal') ? 'block' : 'none';
+
+      updateChartsFromBbox();
+    }
+
+    // Listeners de tabs
+    document.querySelectorAll('.sv-chart-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        if (!tab.classList.contains('disabled')) setMode(tab.dataset.mode);
+      });
+    });
+
+    // Listeners de selectores
+    document.getElementById('sv-chart-attr-select').addEventListener('change', () => {
+      analysis.colX = document.getElementById('sv-chart-attr-select').value;
+      updateChartsFromBbox();
+    });
+
+    document.getElementById('sv-chart-attr-y').addEventListener('change', () => {
+      analysis.colY = document.getElementById('sv-chart-attr-y').value;
+      updateChartsFromBbox();
+    });
+
+    document.getElementById('sv-fecha-col-select')?.addEventListener('change', () => {
+      analysis.fechaCol = document.getElementById('sv-fecha-col-select').value;
+      updateChartsFromBbox();
+    });
+
+    // ─────────────────────────────────────────────────
+    // 15. Bbox stats en sidebar footer
+    // ─────────────────────────────────────────────────
+    function updateBboxStats() {
+      const features = getVisibleFeatures();
+      const bounds   = state.map?.getBounds();
+      if (!bounds) return;
+
+      document.getElementById('sv-bbox-stats').innerHTML = `
+        Features visibles: <span>${features.length.toLocaleString()}</span><br>
+        Zoom: <span>${state.map.getZoom()}</span><br>
+        N: <span>${bounds.getNorth().toFixed(3)}</span>
+        S: <span>${bounds.getSouth().toFixed(3)}</span><br>
+        E: <span>${bounds.getEast().toFixed(3)}</span>
+        W: <span>${bounds.getWest().toFixed(3)}</span>
+      `;
+    }
+
+    // ─────────────────────────────────────────────────
+    // 16. Render info del proyecto en navbar/sidebar
+    // ─────────────────────────────────────────────────
+    const CATEGORY_ICONS = {
+      CLIMA:'🌤', FAUNA:'🦎', AGUA:'💧', SUELO:'🌍',
+      VEGETACION:'🌿', ATMOSFERA:'🌬', OTRO:'◈',
+    };
+
+    function renderProjectInfo(proyecto) {
+      if (!proyecto) return;
+      const icon = CATEGORY_ICONS[proyecto.categoria] || '◈';
+
+      document.getElementById('sv-nav-proyecto-titulo').textContent =
+        proyecto.titulo || 'Dashboard';
+      document.getElementById('sv-nav-proyecto-meta').textContent =
+        `${proyecto.categoria || ''} · ${proyecto.capas_aprobadas || 0} capas`;
+      document.getElementById('sv-sidebar-cat-icon').textContent = icon;
+      document.getElementById('sv-sidebar-titulo').textContent =
+        proyecto.titulo || 'Proyecto';
+      document.getElementById('sv-sidebar-meta').textContent =
+        `${proyecto.capas_aprobadas || '?'} capas · ${
+          (proyecto.total_features || 0).toLocaleString()} features`;
+
+      document.title = `${proyecto.titulo || 'Dashboard'} — SIVAG`;
+    }
+
+    // ─────────────────────────────────────────────────
+    // 17. Base maps
+    // ─────────────────────────────────────────────────
+    document.querySelectorAll('[data-basemap]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.basemap;
+        if (key === state.activeBasemap) return;
+
+        // Remover actual
+        state.map.removeLayer(state.basemaps[state.activeBasemap]);
+        state.map.addLayer(state.basemaps[key]);
+        state.basemaps[key].bringToBack();
+        state.activeBasemap = key;
+
+        // Re-add capas encima del nuevo basemap
+        state.capas.filter(c => c.visible && c.leafletLayer).forEach(c => {
+          state.map.removeLayer(c.leafletLayer);
+          c.leafletLayer.addTo(state.map);
+        });
+
+        document.querySelectorAll('[data-basemap]').forEach(b =>
+          b.classList.toggle('active', b.dataset.basemap === key)
+        );
+      });
+    });
+
+    // ─────────────────────────────────────────────────
+    // 18. Controles UI
+    // ─────────────────────────────────────────────────
+
+    // Fit bounds
+    document.getElementById('btn-fit-bounds').addEventListener('click', () => {
+      if (state.map) fitAllLayers(state.map);
+    });
+
+    // Toggle charts panel
+    const chartsPanel   = document.getElementById('sv-charts-panel');
+    const collapseBtn   = document.getElementById('sv-charts-collapse-btn');
+    let chartsVisible   = true;
+
+    function toggleCharts() {
+      chartsVisible = !chartsVisible;
+      chartsPanel.classList.toggle('hidden', !chartsVisible);
+      collapseBtn.textContent = chartsVisible ? '▼' : '▲';
+      setTimeout(() => {
+        state.map?.invalidateSize({ animate: false });
+        if (chartsVisible) {
+          // Re-renderizar gráficas con nuevas dimensiones
+          analysis.charts.forEach(c => { try { c.resize(); } catch {} });
+          updateChartsFromBbox();
+        }
+      }, 380);
+    }
+
+    // El panel de gráficas es parte del scroll — el collapse btn todavía funciona para ahorrar espacio
+    document.getElementById('sv-charts-collapse-btn')?.addEventListener('click', toggleCharts);
+
+    // Sidebar colapsar/expandir
+    const sidebar = document.getElementById('sv-dash-sidebar');
+    const sidebarToggle = document.getElementById('sv-sidebar-toggle');
+    let sidebarVisible = true;
+
+    sidebarToggle.addEventListener('click', () => {
+      sidebarVisible = !sidebarVisible;
+      sidebar.classList.toggle('collapsed', !sidebarVisible);
+      const icon = document.getElementById('sv-sidebar-toggle-icon');
+      if (icon) icon.textContent = sidebarVisible ? '◁' : '▷';
+      setTimeout(() => state.map?.invalidateSize({ animate:false }), 300);
+    });
+
+    // Sincronizar tabs del sidebar con el análisis
+    document.querySelectorAll('[data-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.classList.contains('disabled')) return;
+        document.querySelectorAll('[data-mode]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        // Sincronizar también los tabs del panel de gráficas si existen
+        document.querySelectorAll('.sv-chart-tab').forEach(t =>
+          t.classList.toggle('active', t.dataset.mode === btn.dataset.mode)
+        );
+        setMode(btn.dataset.mode);
+      });
+    });
+
+    // ─────────────────────────────────────────────────
+    // 19. Helpers UI
+    // ─────────────────────────────────────────────────
+    function setLoadingLabel(text) {
+      const el = document.getElementById('sv-loading-label');
+      if (el) el.textContent = text;
+    }
+
+    function hideLoading() {
+      const screen = document.getElementById('sv-loading-screen');
+      if (screen) {
+        screen.classList.add('fade-out');
+        setTimeout(() => screen.remove(), 600);
+      }
+    }
+
+    // ─────────────────────────────────────────────────
+    // 20. Arrancar
+    // ─────────────────────────────────────────────────
+    loadDashboard();
+  </script>
+</body>
+</html>

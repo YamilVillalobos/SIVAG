@@ -4,12 +4,13 @@ SIVAG — core/views_capas.py
 Vistas para la ingesta de capas geoespaciales (módulo Drag & Drop).
 
 Endpoints:
-  POST   /api/capas/subir/          — Subir archivo + lanzar ETL
-  GET    /api/capas/<id>/estado/    — Consultar estado de procesamiento
-  GET    /api/capas/<id>/geojson/   — Obtener GeoJSON de una capa aprobada
-  GET    /api/capas/<id>/atributos/ — Listar atributos editables (Excel)
-  PATCH  /api/capas/<id>/atributos/<attr_id>/ — Editar un atributo (RF-04)
-  DELETE /api/capas/<id>/           — Eliminar capa (dueño o admin)
+  POST   /api/capas/subir/                      — Subir archivo + lanzar ETL
+  GET    /api/capas/<id>/estado/                — Consultar estado de procesamiento
+  GET    /api/capas/<id>/geojson/               — Obtener GeoJSON de una capa vectorial aprobada
+  GET    /api/capas/<id>/raster/                — Obtener GeoTIFF nativo de una capa raster aprobada
+  GET    /api/capas/<id>/atributos/             — Listar atributos editables (Excel)
+  PATCH  /api/capas/<id>/atributos/<attr_id>/   — Editar un atributo (RF-04)
+  DELETE /api/capas/<id>/                       — Eliminar capa (dueño o admin)
 
 Requisitos: RF-02, RF-03, RF-04, RF-09, RNF-SEG-02
 """
@@ -80,6 +81,17 @@ def _md5(filepath: str) -> str:
     return h.hexdigest()
 
 
+def _check_acceso(capa, user) -> bool:
+    """
+    Helper reutilizable: devuelve True si el usuario tiene acceso a la capa.
+    Dueño, admin, o proyecto público.
+    """
+    es_dueno   = capa.proyecto.investigador == user
+    es_admin   = user.rol == Rol.ADMIN
+    es_publico = capa.proyecto.visibilidad == "PUBLICO"
+    return es_dueno or es_admin or es_publico
+
+
 # ─────────────────────────────────────────────────────────
 # Extensiones permitidas por tipo
 # ─────────────────────────────────────────────────────────
@@ -104,7 +116,7 @@ class SubirCapaView(APIView):
     Body: multipart/form-data
       archivo      : File  — el archivo a subir
       tipo_archivo : str   — "EXCEL" | "SHAPE" | "GEOTIFF"
-      proyecto_id  : str   — UUID del proyecto al que pertenece
+      proyecto_id  : str   — UUID del proyecto al que pertenece  (también acepta "proyecto")
       nombre       : str   — nombre descriptivo de la capa
       descripcion  : str   — (opcional)
 
@@ -130,7 +142,8 @@ class SubirCapaView(APIView):
         # ── Validar campos del formulario ────────────────
         archivo      = request.FILES.get("archivo")
         tipo_archivo = request.data.get("tipo_archivo", "").upper()
-        proyecto_id  = request.data.get("proyecto_id", "")
+        # Acepta tanto "proyecto_id" (convención API) como "proyecto" (formulario HTML)
+        proyecto_id  = request.data.get("proyecto_id") or request.data.get("proyecto", "")
         nombre       = request.data.get("nombre", "").strip()
         descripcion  = request.data.get("descripcion", "").strip()
 
@@ -214,10 +227,10 @@ class SubirCapaView(APIView):
             "CapaGeoespacial",
             capa.id,
             {
-                "nombre":      nombre,
-                "tipo":        tipo_archivo,
+                "nombre":       nombre,
+                "tipo":         tipo_archivo,
                 "tamano_bytes": archivo.size,
-                "proyecto_id": str(proyecto.id),
+                "proyecto_id":  str(proyecto.id),
             },
         )
 
@@ -248,12 +261,20 @@ class EstadoCapaView(APIView):
 
     Respuesta 200:
       {
-        "capa_id":          "...",
-        "estado":           "PENDIENTE" | "PROCESANDO" | "APROBADO" | "ERROR",
-        "mensaje_error":    "..." (solo en ERROR),
-        "num_features":     int,
-        "tipo_geometria":   "...",
+        "capa_id":             "...",
+        "nombre":              "...",
+        "estado":              "PENDIENTE" | "PROCESANDO" | "APROBADO" | "ERROR",
+        "mensaje_error":       "..." (solo en ERROR),
+        "num_features":        int,
+        "tipo_geometria":      "...",
+        "tipo_archivo":        "EXCEL" | "SHAPE" | "GEOTIFF" | "CSV",
         "sistema_coordenadas": "...",
+        "tiene_geojson":       bool,
+        "tiene_raster":        bool,
+        "raster_banda_min":    float | null,
+        "raster_banda_max":    float | null,
+        "fecha_subida":        "...",
+        "fecha_procesado":     "...",
       }
     """
 
@@ -262,13 +283,7 @@ class EstadoCapaView(APIView):
     def get(self, request, capa_id):
         capa = get_object_or_404(CapaGeoespacial, pk=capa_id)
 
-        # Verificar acceso: dueño, admin, o capa de proyecto público
-        user = request.user
-        es_dueno = capa.proyecto.investigador == user
-        es_admin = user.rol == Rol.ADMIN
-        es_publico = capa.proyecto.visibilidad == "PUBLICO"
-
-        if not (es_dueno or es_admin or es_publico):
+        if not _check_acceso(capa, request.user):
             return Response(
                 {"detail": "No tienes acceso a esta capa."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -281,8 +296,14 @@ class EstadoCapaView(APIView):
             "mensaje_error":       capa.mensaje_error,
             "num_features":        capa.num_features,
             "tipo_geometria":      capa.tipo_geometria,
-            "sistema_coordenadas": capa.sistema_coordenadas,
             "tipo_archivo":        capa.tipo_archivo,
+            "sistema_coordenadas": capa.sistema_coordenadas,
+            # Flags que consume el dashboard para decidir qué endpoint llamar
+            "tiene_geojson":       bool(capa.geojson_path),
+            "tiene_raster":        bool(capa.raster_path),
+            # Metadatos raster para colorización en el frontend
+            "raster_banda_min":    capa.raster_banda_min,
+            "raster_banda_max":    capa.raster_banda_max,
             "fecha_subida":        capa.fecha_subida,
             "fecha_procesado":     capa.fecha_procesado,
         })
@@ -301,7 +322,8 @@ class GeoJSONCapaView(APIView):
       - Sirve el archivo directamente con FileResponse (streaming).
       - Nginx en producción debería servirlo con X-Accel-Redirect.
 
-    Solo disponible para capas APROBADAS de tipo EXCEL o SHAPE.
+    Solo disponible para capas APROBADAS de tipo EXCEL, CSV o SHAPE.
+    Para GeoTIFF usar el endpoint /raster/.
     """
 
     permission_classes = [IsActiveUser]
@@ -309,13 +331,7 @@ class GeoJSONCapaView(APIView):
     def get(self, request, capa_id):
         capa = get_object_or_404(CapaGeoespacial, pk=capa_id)
 
-        # Control de acceso
-        user = request.user
-        es_dueno   = capa.proyecto.investigador == user
-        es_admin   = user.rol == Rol.ADMIN
-        es_publico = capa.proyecto.visibilidad == "PUBLICO"
-
-        if not (es_dueno or es_admin or es_publico):
+        if not _check_acceso(capa, request.user):
             return Response(
                 {"detail": "No tienes acceso a esta capa."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -329,7 +345,7 @@ class GeoJSONCapaView(APIView):
 
         if not capa.geojson_path:
             return Response(
-                {"detail": "Esta capa no tiene datos vectoriales (puede ser un ráster)."},
+                {"detail": "Esta capa no tiene datos vectoriales. Si es un GeoTIFF, usa el endpoint /raster/."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -351,7 +367,73 @@ class GeoJSONCapaView(APIView):
 
 
 # ─────────────────────────────────────────────────────────
-# 4. AtributosCapaView — GET /api/capas/<id>/atributos/
+# 4. RasterCapaView — GET /api/capas/<id>/raster/   ← NUEVO
+# ─────────────────────────────────────────────────────────
+
+class RasterCapaView(APIView):
+    """
+    Sirve el archivo GeoTIFF procesado (con overviews) para
+    visualización directa en el frontend con georaster-layer-for-leaflet.
+
+    El archivo se sirve TAL CUAL desde disco — sin conversión ni
+    pérdida de información espectral. El frontend usa la librería
+    georaster para leerlo en el navegador y renderizarlo sobre Leaflet.
+
+    Solo disponible para capas APROBADAS de tipo GEOTIFF.
+    Para vectores (Excel, Shape, CSV) usar /geojson/.
+
+    Optimizaciones:
+      - FileResponse en modo streaming para no cargar el TIFF en RAM.
+      - En producción Nginx puede servirlo directamente con
+        X-Accel-Redirect apuntando a /media/rasters/.
+    """
+
+    permission_classes = [IsActiveUser]
+
+    def get(self, request, capa_id):
+        capa = get_object_or_404(CapaGeoespacial, pk=capa_id)
+
+        if not _check_acceso(capa, request.user):
+            return Response(
+                {"detail": "No tienes acceso a esta capa."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if capa.estado_validacion != EstadoValidacion.APROBADO:
+            return Response(
+                {"detail": f"La capa aún no está lista (estado: {capa.estado_validacion})."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if not capa.raster_path:
+            return Response(
+                {"detail": "Esta capa no es un ráster. Si es vectorial, usa el endpoint /geojson/."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        raster_abs = os.path.join(settings.MEDIA_ROOT, capa.raster_path)
+
+        if not os.path.exists(raster_abs):
+            logger.error("GeoTIFF no encontrado en disco: %s", raster_abs)
+            return Response(
+                {"detail": "Archivo GeoTIFF no encontrado. Contacta al administrador."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        response = FileResponse(
+            open(raster_abs, "rb"),
+            content_type="image/tiff",
+        )
+        response["Content-Disposition"] = f'inline; filename="{capa.id}.tiff"'
+        # Necesario para que georaster-layer-for-leaflet (JS en el navegador)
+        # pueda leer el archivo desde un fetch() cross-origin en desarrollo.
+        # En producción CORS ya está configurado globalmente en settings.py.
+        response["Access-Control-Expose-Headers"] = "Content-Length, Content-Type"
+        return response
+
+
+# ─────────────────────────────────────────────────────────
+# 5. AtributosCapaView — GET /api/capas/<id>/atributos/
 # ─────────────────────────────────────────────────────────
 
 class AtributosCapaView(APIView):
@@ -401,29 +483,29 @@ class AtributosCapaView(APIView):
 
         filas = [
             {
-                "id":              str(a.id),
-                "indice_original": a.indice_original,
-                "latitud":         a.latitud,
-                "longitud":        a.longitud,
-                "datos":           a.datos,
-                "modificado_por":  a.modificado_por.username if a.modificado_por else None,
+                "id":               str(a.id),
+                "indice_original":  a.indice_original,
+                "latitud":          a.latitud,
+                "longitud":         a.longitud,
+                "datos":            a.datos,
+                "modificado_por":   a.modificado_por.username if a.modificado_por else None,
                 "fecha_modificacion": a.fecha_modificacion,
             }
             for a in atributos
         ]
 
         return Response({
-            "capa_id":    str(capa.id),
-            "total":      total,
-            "page":       page,
-            "page_size":  page_size,
-            "columnas":   list(capa.columnas_schema.keys()),
-            "atributos":  filas,
+            "capa_id":   str(capa.id),
+            "total":     total,
+            "page":      page,
+            "page_size": page_size,
+            "columnas":  list(capa.columnas_schema.keys()),
+            "atributos": filas,
         })
 
 
 # ─────────────────────────────────────────────────────────
-# 5. EditarAtributoView — PATCH /api/capas/<id>/atributos/<attr_id>/
+# 6. EditarAtributoView — PATCH /api/capas/<id>/atributos/<attr_id>/
 # ─────────────────────────────────────────────────────────
 
 class EditarAtributoView(APIView):
@@ -465,8 +547,8 @@ class EditarAtributoView(APIView):
 
         # Merge: solo actualiza los campos enviados
         attr.datos.update(nuevos_datos)
-        attr.modificado_por      = user
-        attr.fecha_modificacion  = timezone.now()
+        attr.modificado_por     = user
+        attr.fecha_modificacion = timezone.now()
         attr.save(update_fields=["datos", "modificado_por", "fecha_modificacion"])
 
         _log(
@@ -479,16 +561,16 @@ class EditarAtributoView(APIView):
         )
 
         return Response({
-            "id":               str(attr.id),
-            "indice_original":  attr.indice_original,
-            "datos":            attr.datos,
-            "modificado_por":   user.username,
+            "id":                str(attr.id),
+            "indice_original":   attr.indice_original,
+            "datos":             attr.datos,
+            "modificado_por":    user.username,
             "fecha_modificacion": attr.fecha_modificacion,
         })
 
 
 # ─────────────────────────────────────────────────────────
-# 6. EliminarCapaView — DELETE /api/capas/<id>/
+# 7. EliminarCapaView — DELETE /api/capas/<id>/
 # ─────────────────────────────────────────────────────────
 
 class EliminarCapaView(APIView):
@@ -497,6 +579,7 @@ class EliminarCapaView(APIView):
 
     Solo el investigador dueño o el admin pueden eliminar.
     Genera un LogAuditoria de tipo ELIMINACION.
+    Borra: archivo original, GeoJSON generado y GeoTIFF procesado.
     """
 
     permission_classes = [IsActiveUser]
@@ -551,7 +634,7 @@ def _delete_capa_files(capa: CapaGeoespacial) -> None:
     except Exception as e:
         logger.warning("No se pudo eliminar archivo original de capa %s: %s", capa.id, e)
 
-    # GeoJSON
+    # GeoJSON vectorial
     if capa.geojson_path:
         abs_path = os.path.join(media_root, capa.geojson_path)
         try:
@@ -560,7 +643,7 @@ def _delete_capa_files(capa: CapaGeoespacial) -> None:
         except Exception as e:
             logger.warning("No se pudo eliminar GeoJSON de capa %s: %s", capa.id, e)
 
-    # Ráster COG
+    # GeoTIFF procesado (con overviews)
     if capa.raster_path:
         abs_path = os.path.join(media_root, capa.raster_path)
         try:

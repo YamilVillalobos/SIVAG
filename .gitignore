@@ -13,3 +13,5 @@ __pycache__/
 # Variables de entorno y configuración de VS Code
 .env
 .vscode/
+backend/media/
+DOCUMENTACION/api de chat bot.txt
