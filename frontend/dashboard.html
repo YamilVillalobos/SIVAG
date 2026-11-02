@@ -1275,7 +1275,7 @@
   <script type="module">
     import { showAlert }     from './js/ui.js';
     import { Auth }          from './js/auth.js';
-    import { API }           from './js/api.js';
+    import { API, API_BASE } from './js/api.js';
 
 
     // ── Sidenav de navegación ──────────────────────────────────
@@ -1525,7 +1525,7 @@
     // ─────────────────────────────────────────────────
     async function loadCapaVector(capaId, capaState, map) {
       const response = await fetch(
-        `http://localhost:8001/api/capas/${capaId}/geojson/`,
+        `${API_BASE}/api/capas/${capaId}/geojson/`,
         {
           headers: isAuth
             ? { 'Authorization': `Bearer ${localStorage.getItem('sivag_access')}` }
@@ -1552,7 +1552,7 @@
     async function loadCapaRaster(capaId, capaState, map) {
       // El backend sirve el raster desde /api/capas/<id>/raster/
       // (endpoint que debes agregar — ver nota abajo)
-      const rasterUrl = `http://localhost:8001/api/capas/${capaId}/raster/`;
+      const rasterUrl = `${API_BASE}/api/capas/${capaId}/raster/`;
 
       const authHeaders = isAuth
         ? { 'Authorization': `Bearer ${localStorage.getItem('sivag_access')}` }
